@@ -158,8 +158,6 @@ export default function App() {
         // Combine them: Real results (most recent) + remaining optimistic items
         return [...realResults, ...optimisticItems];
       });
-
-      });
     });
     return () => unsubscribe();
   }, []);

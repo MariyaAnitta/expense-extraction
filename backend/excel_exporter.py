@@ -79,14 +79,20 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str):
     # 4. Data Rows
     # Find the row containing "Total" (usually at the bottom of the data area)
     total_row_idx = None
-    for row in range(5, ws.max_row + 1):
-        if str(ws.cell(row=row, column=1).value).lower() == "total":
-            total_row_idx = row
-            break
+    for row in range(5, 500): # Scan first 500 rows
+        try:
+            val = str(ws.cell(row=row, column=1).value or "").lower()
+            if "total" in val:
+                total_row_idx = row
+                break
+        except: continue
     
-    # If found, insert rows BEFORE it. If not found, start at row 5.
-    if total_row_idx:
-        ws.insert_rows(5, amount=len(results_to_process))
+    # Only insert rows if we have more data than empty space above the Total row
+    # We want at least some buffer. If len(results) > (total_row_idx - 5), we insert.
+    if total_row_idx and (len(results_to_process) > (total_row_idx - 6)):
+        needed = len(results_to_process) - (total_row_idx - 6)
+        if needed > 0:
+            ws.insert_rows(total_row_idx - 1, amount=needed)
     
     row_idx = 5
     running_balance = 0
