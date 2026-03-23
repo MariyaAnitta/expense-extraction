@@ -53,7 +53,7 @@ class ReceiptProcessor:
                     self.pulse_url,
                     headers=self.pulse_headers,
                     files={"file": f},
-                    timeout=30 # Prevent indefinite hanging
+                    timeout=60 # Prevent indefinite hanging
                 )
             
             if response.status_code == 200:
