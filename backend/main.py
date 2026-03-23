@@ -108,7 +108,9 @@ async def upload_batch(files: List[UploadFile] = File(...)):
             
             # 2. Save locally (Temporary)
             content = await file.read()
-            local_path = os.path.join(uploads_dir, f"{doc_id}_{file.filename}")
+            # Ensure safe filename (remove subdirectories)
+            safe_filename = os.path.basename(file.filename)
+            local_path = os.path.join(uploads_dir, f"{doc_id}_{safe_filename}")
             
             with open(local_path, "wb") as f:
                 f.write(content)
