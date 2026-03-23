@@ -95,7 +95,6 @@ export default function App() {
   }, []);
   const [isProcessing, setIsProcessing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [hasStartedProcessing, setHasStartedProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -211,7 +210,6 @@ export default function App() {
     try {
       await axios.post(`${API_URL}/clear-queue`);
       setSelectedResult(null);
-      setHasStartedProcessing(false); // Reset processing state when queue is cleared
     } catch (error) {
       console.error("Failed to clear queue", error);
     }
@@ -231,7 +229,6 @@ export default function App() {
   const startProcessing = async () => {
     if (queue.filter(r => r.status === 'QUEUED' || r.status === 'FAILED').length === 0) return;
     
-    setHasStartedProcessing(true);
     setIsProcessing(true);
     console.log("Starting batch processing...");
     try {
@@ -384,9 +381,11 @@ export default function App() {
             const activeItems = queue.filter(r => r.status === 'PROCESSING' || r.status === 'QUEUED');
             const completedCount = queue.filter(r => r.status === 'COMPLETED' || r.status === 'FAILED').length;
             const totalCount = queue.length;
-            const isActive = hasStartedProcessing && (isProcessing || (activeItems.length > 0 && totalCount > 0));
+            
+            // Only show if there's actual active work and we've triggered it
+            const isActive = activeItems.length > 0 && isProcessing;
 
-            if (!isActive || completedCount === totalCount) return null;
+            if (!isActive) return null;
 
             return (
               <motion.div 
@@ -403,7 +402,7 @@ export default function App() {
                   </div>
                   <div className="flex flex-col">
                     <span className="font-bold text-sm">
-                      {completedCount === totalCount ? 'All extractions completed!' : `Extracting ${completedCount + 1} of ${totalCount} documents...`}
+                      {activeItems.length === 0 ? 'All extractions completed!' : `Extracting ${activeItems.length} documents...`}
                     </span>
                     <div className="w-48 h-1 bg-white/20 rounded-full mt-1 overflow-hidden">
                       <motion.div 

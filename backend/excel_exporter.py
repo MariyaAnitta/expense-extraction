@@ -76,7 +76,18 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str):
         ws['D3'].number_format = bhd_format
     except: pass
 
-    # 4. Data Rows (Start exactly at Row 5)
+    # 4. Data Rows
+    # Find the row containing "Total" (usually at the bottom of the data area)
+    total_row_idx = None
+    for row in range(5, ws.max_row + 1):
+        if str(ws.cell(row=row, column=1).value).lower() == "total":
+            total_row_idx = row
+            break
+    
+    # If found, insert rows BEFORE it. If not found, start at row 5.
+    if total_row_idx:
+        ws.insert_rows(5, amount=len(results_to_process))
+    
     row_idx = 5
     running_balance = 0
     
