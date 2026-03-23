@@ -159,10 +159,7 @@ export default function App() {
         return [...realResults, ...optimisticItems];
       });
 
-      // Reset started state if queue becomes empty after processing
-      if (realResults.length === 0 && !realResults.some(r => r.status === 'QUEUED' || r.status === 'PROCESSING')) {
-        setHasStartedProcessing(false);
-      }
+      });
     });
     return () => unsubscribe();
   }, []);
