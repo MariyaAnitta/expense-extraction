@@ -655,7 +655,8 @@ export default function App() {
                   <div className="flex items-center gap-2 px-3 py-1 bg-white border border-slate-200 rounded-full shadow-sm">
                     <div className={cn(
                       "w-2 h-2 rounded-full",
-                      selectedResult.status === 'COMPLETED' ? "bg-emerald-500" : "bg-amber-500"
+                      selectedResult.status === 'COMPLETED' ? "bg-emerald-500" : 
+                      selectedResult.status === 'FAILED' ? "bg-rose-500" : "bg-amber-500"
                     )} />
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">
                       {selectedResult.status}
@@ -663,6 +664,15 @@ export default function App() {
                   </div>
                 )}
               </div>
+
+              {selectedResult?.status === 'FAILED' && (
+                <div className="mx-8 mt-6 p-4 bg-rose-50 border border-rose-100 rounded-2xl">
+                  <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-1">Extraction Error</p>
+                  <p className="text-xs font-bold text-rose-700 leading-relaxed">
+                    {selectedResult.error || "The AI analysis failed for this document. Please try again or enter details manually."}
+                  </p>
+                </div>
+              )}
 
               <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
                 {!selectedResult ? (
