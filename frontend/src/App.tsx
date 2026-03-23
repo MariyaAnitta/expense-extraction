@@ -16,7 +16,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-const APP_VERSION = "v1.2 - Firebase Persistent";
+const APP_VERSION = "v1.4 - Zero-Bucket Mode";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -682,7 +682,7 @@ export default function App() {
                       {/* Extraction Fields */}
                       <div className="space-y-6">
                         
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-6">
+                        <div className="grid grid-cols-1 gap-y-6">
                           {/* Transaction Date */}
                           <div className="space-y-2">
                             <label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.1em] ml-1 block">TRANSACTION DATE</label>
@@ -788,36 +788,18 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Document Preview */}
+                      {/* Document Preview (Disabled in Zero-Bucket Mode) */}
                       {selectedResult && selectedResult.file_name !== "Manual Entry" && (
                         <div className="pt-8 border-t border-slate-100 space-y-4">
                           <div className="flex items-center justify-between">
                             <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Document Preview</h3>
-                            <a 
-                              href={`${API_URL}/files/${selectedResult.file_id}`} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:underline flex items-center gap-1"
-                            >
-                              View Full <ChevronRight size={12} />
-                            </a>
                           </div>
-                          <div className="aspect-[4/3] bg-slate-50 rounded-[2rem] border border-slate-100 flex flex-col items-center justify-center gap-3 relative group overflow-hidden shadow-inner">
-                            {selectedResult.file_name.toLowerCase().endsWith('.pdf') ? (
-                              <iframe 
-                                src={`${API_URL}/files/${selectedResult.file_id}#toolbar=0&navpanes=0`} 
-                                className="w-full h-full rounded-[2rem] border-none"
-                                title="PDF Preview"
-                              />
-                            ) : (
-                              <img 
-                                src={`${API_URL}/files/${selectedResult.file_id}`} 
-                                className="w-full h-full object-cover rounded-[2rem]"
-                                alt="Receipt Preview"
-                                onError={(e) => (e.currentTarget.style.display = 'none')}
-                              />
-                            )}
-                            <div className="absolute inset-0 pointer-events-none ring-1 ring-inset ring-black/5 rounded-[2rem]" />
+                          <div className="py-12 bg-slate-50 rounded-[2rem] border border-dashed border-slate-200 flex flex-col items-center justify-center text-center px-8">
+                            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center mb-4 shadow-sm text-slate-300">
+                              <FileText size={24} />
+                            </div>
+                            <p className="text-xs font-bold text-slate-500 mb-1">Preview Disabled</p>
+                            <p className="text-[10px] text-slate-400 leading-relaxed uppercase tracking-tight">Zero-Bucket mode active to avoid storage costs. Results are extracted in memory and saved to database.</p>
                           </div>
                         </div>
                       )}

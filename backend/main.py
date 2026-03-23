@@ -38,8 +38,8 @@ async def root():
 import asyncio
 
 async def run_batch_processor():
-    """Background task to process all queued files using Firebase Storage"""
-    print("Background processor started...")
+    """Background task to process queued files (Local Disk -> Extract -> Delete)"""
+    print("Zero-Bucket Background processor started...")
     docs_ref = db.collection("extractions").where("status", "in", ["QUEUED", "PROCESSING"]).stream()
     
     count = 0
@@ -47,64 +47,53 @@ async def run_batch_processor():
         doc_id = doc.id
         data = doc.to_dict()
         file_name = data.get("name")
-        storage_path = data.get("storage_path")
-        local_path = None
+        temp_path = data.get("temp_local_path")
         
-        try:
-            if not storage_path:
-                # Fallback for old records if any
-                fallback_path = data.get("local_path")
-                if not fallback_path or not os.path.exists(fallback_path):
-                    print(f"No valid file found for {file_name}. Marking as FAILED.")
-                    db.collection("extractions").document(doc_id).update({"status": "FAILED", "error": "File not found."})
-                    continue
-                local_path = fallback_path
-            else:
-                # Download from Firebase Storage to a temp file
-                suffix = os.path.splitext(file_name)[1]
-                fd, local_path = tempfile.mkstemp(suffix=suffix)
-                os.close(fd)
-                blob = bucket.blob(storage_path)
-                blob.download_to_filename(local_path)
-                print(f"Downloaded {file_name} from Storage to {local_path}")
+        if not temp_path or not os.path.exists(temp_path):
+            print(f"No file found for processing {file_name}. Skipping.")
+            db.collection("extractions").document(doc_id).update({"status": "FAILED", "error": "File already cleared from temporary memory."})
+            continue
 
+        try:
             print(f"Processing {file_name}...")
             db.collection("extractions").document(doc_id).update({"status": "PROCESSING"})
             
-            # Process the file (temp local path)
-            result = processor.process_file(local_path)
+            # Process the file
+            result = processor.process_file(temp_path)
             
             # Update Firestore
             update_data = {
                 "status": result.status,
                 "confidence": result.data.confidence if result.data else 0,
                 "data": result.data.model_dump() if result.data else None,
-                "error": result.error
+                "error": result.error,
+                "temp_local_path": None # Clear from DB
             }
             db.collection("extractions").document(doc_id).update(update_data)
             
+            # Cleanup: DELETE the local file immediately after processing
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+                print(f"SUCCESS: Result saved and temp file deleted for {file_name}")
+                
         except Exception as e:
             print(f"Error processing {file_name}: {e}")
             db.collection("extractions").document(doc_id).update({"status": "FAILED", "error": str(e)})
-        finally:
-            # Clean up temp file if we created one
-            if storage_path and local_path and os.path.exists(local_path):
-                try:
-                    os.remove(local_path)
-                    print(f"Cleaned up temp file: {local_path}")
-                except Exception as ex:
-                    print(f"Failed to delete temp file {local_path}: {ex}")
         
         count += 1
         await asyncio.sleep(5)
     
-    print(f"Batch processing completed. Total files: {count}")
+    print(f"Zero-Bucket batch task finished. Total: {count}")
 
 @app.post("/upload-batch")
 async def upload_batch(files: List[UploadFile] = File(...)):
-    """Save multiple files to FIREBASE storage and create queue records"""
+    """Save multiple files to TEMPORARY local storage for processing"""
     uploaded_ids = []
-    print(f"DEBUG: Received batch upload to Firebase: {len(files)} files")
+    print(f"DEBUG: Processing batch upload in Zero-Bucket mode: {len(files)} files")
+    
+    # Use a temporary folder on the local disk (ephemeral on Render)
+    uploads_dir = os.path.join(tempfile.gettempdir(), "receipt_uploads")
+    os.makedirs(uploads_dir, exist_ok=True)
     
     try:
         for file in files:
@@ -116,30 +105,23 @@ async def upload_batch(files: List[UploadFile] = File(...)):
                 "data": None
             })
             doc_id = doc_ref[1].id
-            print(f"DEBUG: Created Firestore record doc_id={doc_id} for {file.filename}")
             
-            # 2. Save to Firebase Storage
+            # 2. Save locally (Temporary)
             content = await file.read()
-            blob_path = f"uploads/{doc_id}/{file.filename}"
-            print(f"DEBUG: Uploading to Firebase Storage blob_path={blob_path}")
-            blob = bucket.blob(blob_path)
-            blob.upload_from_string(content, content_type=file.content_type)
-            print(f"DEBUG: Firebase Storage Upload SUCCESS for {blob_path}")
+            local_path = os.path.join(uploads_dir, f"{doc_id}_{file.filename}")
             
-            # 3. Update Firestore with storage path
+            with open(local_path, "wb") as f:
+                f.write(content)
+                
+            # 3. Update Firestore (NO STORAGE PATH)
             db.collection("extractions").document(doc_id).update({
-                "storage_path": blob_path,
-                "content_type": file.content_type
+                "temp_local_path": local_path
             })
-            print(f"DEBUG: Firestore updated with storage_path={blob_path}")
             uploaded_ids.append(doc_id)
             
-        print(f"DEBUG: Final uploaded_ids={uploaded_ids}")
         return {"status": "success", "count": len(uploaded_ids), "ids": uploaded_ids}
     except Exception as e:
-        print(f"DEBUG ERROR during upload_batch: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"DEBUG ERROR during upload: {e}")
         return {"status": "error", "message": str(e)}
 
 @app.post("/clear-queue")
@@ -184,29 +166,8 @@ async def delete_extraction(doc_id: str):
 
 @app.get("/files/{doc_id}")
 async def get_file(doc_id: str):
-    """Serve the file from Firebase Storage for the frontend preview"""
-    import io
-    from fastapi.responses import StreamingResponse
-    
-    doc = db.collection("extractions").document(doc_id).get()
-    if not doc.exists:
-        return {"error": "Document not found"}
-    
-    data = doc.to_dict()
-    storage_path = data.get("storage_path")
-    content_type = data.get("content_type", "application/octet-stream")
-    
-    if not storage_path:
-        return {"error": "File path not found in database"}
-    
-    try:
-        blob = bucket.blob(storage_path)
-        # Download content to memory
-        content = blob.download_as_bytes()
-        return StreamingResponse(io.BytesIO(content), media_type=content_type)
-    except Exception as e:
-        print(f"Error fetching from static storage: {e}")
-        return {"error": f"Failed to fetch file: {str(e)}"}
+    """Placeholder for file preview in Zero-Bucket mode"""
+    return {"message": "Preview disabled in Zero-Bucket Free Mode to avoid storage costs. All extracted data is shown on the right."}
 
 @app.post("/update-extraction/{doc_id}")
 async def update_extraction(doc_id: str, data: ReceiptData):

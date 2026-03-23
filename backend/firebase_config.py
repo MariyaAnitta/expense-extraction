@@ -38,19 +38,31 @@ firebase_creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
 service_account_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY")
 
 if not firebase_admin._apps:
+    # Initialize Firebase App
+    # If bucket_name is providing errors, we can still use Firestore
+    options = {}
+    if bucket_name:
+        options['storageBucket'] = bucket_name
+
     if firebase_creds_json:
         cred_dict = json.loads(firebase_creds_json)
         cred = credentials.Certificate(cred_dict)
-        firebase_admin.initialize_app(cred, {'storageBucket': bucket_name})
-        print(f"Firebase initialized (Bucket: {bucket_name}) from FIREBASE_CREDENTIALS_JSON")
+        firebase_admin.initialize_app(cred, options)
+        print(f"Firebase initialized (Bucket: {bucket_name if bucket_name else 'None'}) from FIREBASE_CREDENTIALS_JSON")
     elif service_account_path and os.path.exists(service_account_path):
         cred = credentials.Certificate(service_account_path)
-        firebase_admin.initialize_app(cred, {'storageBucket': bucket_name})
-        print(f"Firebase initialized (Bucket: {bucket_name}) from file: {service_account_path}")
+        firebase_admin.initialize_app(cred, options)
+        print(f"Firebase initialized (Bucket: {bucket_name if bucket_name else 'None'}) from file: {service_account_path}")
     else:
-        print(f"WARNING: No Firebase credentials found. Falling back to default (Bucket: {bucket_name}).")
-        firebase_admin.initialize_app(options={'storageBucket': bucket_name})
+        print(f"WARNING: No Firebase credentials found. Falling back to default (Bucket: {bucket_name if bucket_name else 'None'}).")
+        firebase_admin.initialize_app(options=options)
 
 db = firestore.client()
-bucket = storage.bucket()
+# Bucket is optional in Zero-Bucket mode
+bucket = None
+if bucket_name:
+    try:
+        bucket = storage.bucket()
+    except Exception as e:
+        print(f"Note: Storage Bucket not accessible ({e}). Zero-Bucket mode will still work for extraction.")
 
