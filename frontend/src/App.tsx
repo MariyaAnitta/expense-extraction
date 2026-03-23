@@ -4,7 +4,7 @@ import {
   Download, Trash2, Search, Filter, 
   ChevronRight, LayoutDashboard, ShieldCheck, 
   TrendingUp, TrendingDown, Zap, FolderOpen,
-  Plus, Layers, Loader2, Eye, MoreVertical
+  Plus, Layers, Loader2, Eye
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from './lib/firebase';
@@ -534,8 +534,8 @@ export default function App() {
                       <tr className="bg-slate-50/50">
                         <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100 whitespace-nowrap">Document</th>
                         <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Status</th>
-                        <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">AI Confidence</th>
-                        <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100 text-right">Actions</th>
+                        <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100 w-48">AI Confidence</th>
+                        <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100 text-right w-32">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -618,12 +618,12 @@ export default function App() {
                                 ) : <span className="text-slate-300 text-xs ml-2">—</span>}
                               </td>
                               <td className="px-8 py-5 text-right">
-                                <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="flex items-center justify-end gap-1 transition-opacity">
                                   <button onClick={(e) => deleteExtraction(e, item.file_id)} className="p-2 hover:bg-rose-50 text-rose-500 rounded-lg transition-colors">
                                     <Trash2 size={16} />
                                   </button>
-                                  <button className="p-2 hover:bg-slate-100 text-slate-400 rounded-lg transition-colors">
-                                    <MoreVertical size={16} />
+                                  <button className="p-2 hover:bg-indigo-50 text-indigo-600 rounded-lg transition-colors font-black text-[10px] uppercase tracking-widest flex items-center gap-1">
+                                    Review <Eye size={12} />
                                   </button>
                                 </div>
                               </td>
