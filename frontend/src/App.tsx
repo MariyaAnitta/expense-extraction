@@ -3,7 +3,7 @@ import {
   Upload, FileText, 
   Download, Trash2, Search, Filter, 
   ChevronRight, LayoutDashboard, ShieldCheck, 
-  TrendingUp, TrendingDown, Zap, Mail, FolderOpen,
+  TrendingUp, TrendingDown, Zap, FolderOpen,
   Plus, Layers, Loader2, Eye, MoreVertical
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -14,6 +14,8 @@ import {
 import axios from 'axios';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -184,7 +186,7 @@ export default function App() {
         formData.append('files', file);
       });
       
-      const response = await axios.post('http://localhost:8000/upload-batch', formData, {
+      const response = await axios.post(`${API_URL}/upload-batch`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -200,7 +202,7 @@ export default function App() {
   const clearQueue = async () => {
     if (!confirm("Are you sure you want to clear all documents?")) return;
     try {
-      await axios.post('http://localhost:8000/clear-queue');
+      await axios.post(`${API_URL}/clear-queue`);
       setSelectedResult(null);
       setHasStartedProcessing(false); // Reset processing state when queue is cleared
     } catch (error) {
@@ -212,7 +214,7 @@ export default function App() {
     e.stopPropagation();
     if (!confirm("Are you sure you want to delete this document permanently?")) return;
     try {
-      await axios.delete(`http://localhost:8000/delete-extraction/${id}`);
+      await axios.delete(`${API_URL}/delete-extraction/${id}`);
       if (selectedResult?.file_id === id) setSelectedResult(null);
     } catch (error) {
       console.error("Failed to delete", error);
@@ -226,7 +228,7 @@ export default function App() {
     setIsProcessing(true);
     console.log("Starting batch processing...");
     try {
-      const response = await axios.post('http://localhost:8000/process-batch');
+      const response = await axios.post(`${API_URL}/process-batch`);
       console.log("Processing triggered:", response.data);
     } catch (error) {
       console.error("Processing failed", error);
@@ -260,7 +262,7 @@ export default function App() {
 
   const exportToExcel = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/export-excel', { responseType: 'blob' });
+      const response = await axios.get(`${API_URL}/export-excel`, { responseType: 'blob' });
       
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
@@ -279,11 +281,11 @@ export default function App() {
     
     try {
       if (selectedResult.file_id === "draft-manual") {
-        await axios.post('http://localhost:8000/add-manual', selectedResult.data);
+        await axios.post(`${API_URL}/add-manual`, selectedResult.data);
         console.log("Manual entry added to database");
         setSelectedResult(null); // Clear panel to indicate success
       } else {
-        await axios.post(`http://localhost:8000/update-extraction/${selectedResult.file_id}`, selectedResult.data);
+        await axios.post(`${API_URL}/update-extraction/${selectedResult.file_id}`, selectedResult.data);
         console.log("Extraction verified and updated.");
         // The Firestore listener will automatically update the UI status to COMPLETED
       }
@@ -785,7 +787,7 @@ export default function App() {
                           <div className="flex items-center justify-between">
                             <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Document Preview</h3>
                             <a 
-                              href={`http://localhost:8000/files/${selectedResult.file_id}`} 
+                              href={`${API_URL}/files/${selectedResult.file_id}`} 
                               target="_blank" 
                               rel="noopener noreferrer"
                               className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:underline flex items-center gap-1"
@@ -796,13 +798,13 @@ export default function App() {
                           <div className="aspect-[4/3] bg-slate-50 rounded-[2rem] border border-slate-100 flex flex-col items-center justify-center gap-3 relative group overflow-hidden shadow-inner">
                             {selectedResult.file_name.toLowerCase().endsWith('.pdf') ? (
                               <iframe 
-                                src={`http://localhost:8000/files/${selectedResult.file_id}#toolbar=0&navpanes=0`} 
+                                src={`${API_URL}/files/${selectedResult.file_id}#toolbar=0&navpanes=0`} 
                                 className="w-full h-full rounded-[2rem] border-none"
                                 title="PDF Preview"
                               />
                             ) : (
                               <img 
-                                src={`http://localhost:8000/files/${selectedResult.file_id}`} 
+                                src={`${API_URL}/files/${selectedResult.file_id}`} 
                                 className="w-full h-full object-cover rounded-[2rem]"
                                 alt="Receipt Preview"
                                 onError={(e) => (e.currentTarget.style.display = 'none')}
