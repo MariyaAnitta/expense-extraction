@@ -61,10 +61,10 @@ class ReceiptProcessor:
                 markdown = data.get("markdown", "")
                 # Pulse often provides 'confidence' as a 0-1 float
                 confidence = data.get("confidence", 0.95) 
-                print(f"Pulse OCR Success. Extracted {len(markdown)} characters. Confidence: {confidence}")
+                print(f"DEBUG PULSE SUCCESS: Found {len(markdown)} characters. Confidence: {confidence}")
                 return markdown, float(confidence) * 100
             else:
-                print(f"Pulse OCR HTTP Error: {response.status_code} - {response.text}")
+                print(f"DEBUG PULSE HTTP Error: {response.status_code} - {response.text}")
                 raise Exception(f"Pulse OCR Error: {response.status_code} - {response.text}")
         except requests.exceptions.Timeout:
             print(f"Pulse OCR TIMED OUT for {file_path}")
@@ -116,15 +116,45 @@ class ReceiptProcessor:
         {raw_text}
         """
         
-        response = self.model.generate_content(prompt)
-        # Clean response if needed (Gemini sometimes adds markdown blocks)
-        json_str = response.text.strip().replace("```json", "").replace("```", "")
-        data_dict = json.loads(json_str)
-        
-        # Add confidence score (passed from Pulse or default)
-        data_dict["confidence"] = confidence 
-        
-        return ReceiptData(**data_dict)
+        try:
+            print(f"DEBUG: Structuring text with Gemini. Raw text length: {len(raw_text)}")
+            
+            # Using specific response_mime_type ensures valid JSON
+            response = self.model.generate_content(
+                prompt,
+                generation_config={"response_mime_type": "application/json"}
+            )
+            
+            json_str = response.text.strip()
+            print(f"DEBUG: Gemini raw response: {json_str}")
+            
+            # Clean up potential markdown marks if Gemini still sends them in JSON mode
+            if "```" in json_str:
+                json_str = json_str.split("```")[1]
+                if json_str.startswith("json"):
+                    json_str = json_str[4:]
+            
+            data_dict = json.loads(json_str)
+            print(f"DEBUG: Parsed data_dict keys: {list(data_dict.keys())}")
+            
+            # Basic validation/mapping for critical fields
+            if not data_dict.get("description"):
+                data_dict["description"] = "No description available"
+                
+            # Add confidence score
+            data_dict["confidence"] = confidence 
+            
+            return ReceiptData(**data_dict)
+        except Exception as e:
+            print(f"DEBUG ERROR: Vertex AI Structure Failed: {e}")
+            # Return a valid but empty record so the table doesn't break
+            return ReceiptData(
+                date=datetime.now().strftime("%d/%m/%Y"),
+                description=f"Analysis Error: {str(e)[:50]}",
+                amount=0.0,
+                confidence=0.0,
+                remarks="ERROR"
+            )
 
     def process_file(self, file_path: str) -> ExtractionResult:
         """Complete pipeline: Pulse OCR -> Vertex AI Structure"""
