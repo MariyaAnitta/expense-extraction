@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Upload, FileText, 
   Download, Trash2, Search, Filter, 
-  ChevronRight, LayoutDashboard, ShieldCheck, 
+  ChevronRight, ChevronDown, LayoutDashboard, ShieldCheck, 
   TrendingUp, TrendingDown, Zap, FolderOpen,
   Plus, Layers, Loader2, Eye
 } from 'lucide-react';
@@ -682,14 +682,14 @@ export default function App() {
                       {/* Extraction Fields */}
                       <div className="space-y-6">
                         
-                        <div className="grid grid-cols-1 gap-y-6">
+                        <div className="grid grid-cols-[1.4fr,1fr] gap-4">
                           {/* Transaction Date */}
                           <div className="space-y-2">
                             <label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.1em] ml-1 block">TRANSACTION DATE</label>
                             <div className="relative group">
                               <input 
                                 type="date" 
-                                className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 pr-10 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                                className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 pr-2 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
                                 value={(() => {
                                   const d = selectedResult?.data?.date;
                                   if (!d) return '';
@@ -711,29 +711,32 @@ export default function App() {
                           {/* Entry Type */}
                           <div className="space-y-2">
                             <label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.1em] ml-1 block">ENTRY TYPE</label>
-                            <button 
-                              onClick={() => {
-                                const isDep = selectedResult?.data?.category === 'Deposit';
-                                const currentAmount = isDep ? (selectedResult?.data?.deposit_amount || '') : (selectedResult?.data?.amount || '');
-                                handleDataChange('category', isDep ? 'Expense' : 'Deposit');
-                                // Swap amounts logically
-                                if (isDep) {
-                                  handleDataChange('amount', currentAmount ? Number(currentAmount) : null);
-                                  handleDataChange('deposit_amount', null);
-                                } else {
-                                  handleDataChange('deposit_amount', currentAmount ? Number(currentAmount) : null);
-                                  handleDataChange('amount', null);
-                                }
-                              }}
-                              className={cn(
-                                "w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl text-sm font-bold transition-all border border-transparent",
-                                selectedResult?.data?.category === 'Deposit' 
-                                  ? "bg-emerald-50/50 text-emerald-600 focus:bg-emerald-50"
-                                  : "bg-rose-50/50 text-rose-600 focus:bg-rose-50"
-                              )}>
-                              {selectedResult?.data?.category === 'Deposit' ? <Plus size={16} /> : <TrendingDown size={16} />}
-                              {selectedResult?.data?.category || 'Expense'}
-                            </button>
+                            <div className="relative">
+                              <select
+                                value={selectedResult?.data?.category || 'Expense'}
+                                onChange={(e) => {
+                                  const newCat = e.target.value;
+                                  const isDep = newCat === 'Deposit';
+                                  const currentAmount = isDep ? (selectedResult?.data?.amount || '') : (selectedResult?.data?.deposit_amount || '');
+                                  
+                                  handleDataChange('category', newCat);
+                                  if (isDep) {
+                                    handleDataChange('deposit_amount', currentAmount ? Number(currentAmount) : null);
+                                    handleDataChange('amount', null);
+                                  } else {
+                                    handleDataChange('amount', currentAmount ? Number(currentAmount) : null);
+                                    handleDataChange('deposit_amount', null);
+                                  }
+                                }}
+                                className="w-full appearance-none bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                              >
+                                <option value="Expense">Expense</option>
+                                <option value="Deposit">Deposit</option>
+                              </select>
+                              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                <ChevronDown size={16} />
+                              </div>
+                            </div>
                           </div>
                         </div>
 
@@ -788,21 +791,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Document Preview (Disabled in Zero-Bucket Mode) */}
-                      {selectedResult && selectedResult.file_name !== "Manual Entry" && (
-                        <div className="pt-8 border-t border-slate-100 space-y-4">
-                          <div className="flex items-center justify-between">
-                            <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Document Preview</h3>
-                          </div>
-                          <div className="py-12 bg-slate-50 rounded-[2rem] border border-dashed border-slate-200 flex flex-col items-center justify-center text-center px-8">
-                            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center mb-4 shadow-sm text-slate-300">
-                              <FileText size={24} />
-                            </div>
-                            <p className="text-xs font-bold text-slate-500 mb-1">Preview Disabled</p>
-                            <p className="text-[10px] text-slate-400 leading-relaxed uppercase tracking-tight">Zero-Bucket mode active to avoid storage costs. Results are extracted in memory and saved to database.</p>
-                          </div>
-                        </div>
-                      )}
+
 
                       <div className="pt-4">
                          <button 

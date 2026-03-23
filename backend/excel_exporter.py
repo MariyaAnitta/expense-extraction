@@ -85,6 +85,10 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str):
     except: pass
 
     # 4. Data Rows (Start exactly at Row 5)
+    # Insert rows first to expand any Excel Tables and push the 'Total' row down
+    if results_to_process:
+        ws.insert_rows(5, amount=len(results_to_process))
+        
     row_idx = 5
     running_balance = 0
     
