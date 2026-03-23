@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Credentials (PROTECT THESE)
+*.json
+!package.json
+!tsconfig.json
+
+# Node
+node_modules/
+dist/
+.DS_Store
