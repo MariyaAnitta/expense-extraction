@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any
 from google.cloud import aiplatform
 from vertexai.generative_models import GenerativeModel, Part
 import vertexai
-from .models import ReceiptData, ExtractionResult
+from models import ReceiptData, ExtractionResult
 from dotenv import load_dotenv
 
 # Load from specific backend folder

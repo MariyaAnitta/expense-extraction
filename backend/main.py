@@ -5,10 +5,10 @@ from typing import List, Optional
 from fastapi import FastAPI, UploadFile, File, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from .firebase_config import db, bucket
-from .processor import ReceiptProcessor
-from .excel_exporter import generate_petty_cash_log
-from .models import ExtractionResult, ReceiptData
+from firebase_config import db, bucket
+from processor import ReceiptProcessor
+from excel_exporter import generate_petty_cash_log
+from models import ExtractionResult, ReceiptData
 from dotenv import load_dotenv
 
 # Load from specific backend folder

@@ -2,7 +2,7 @@ import openpyxl
 import os
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from datetime import datetime
-from .models import ReceiptData, ExtractionResult
+from models import ReceiptData, ExtractionResult
 from typing import List
 
 def generate_petty_cash_log(results: List[ExtractionResult], output_path: str):
