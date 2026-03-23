@@ -3,7 +3,7 @@ import {
   Upload, FileText, 
   Download, Trash2, Search, Filter, 
   ChevronRight, ChevronDown, LayoutDashboard, ShieldCheck, 
-  TrendingUp, TrendingDown, Zap, FolderOpen,
+  TrendingUp, Zap, FolderOpen,
   Plus, Layers, Loader2, Eye
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
