@@ -40,7 +40,7 @@ import asyncio
 async def run_batch_processor():
     """Background task to process queued files (Local Disk -> Extract -> Delete)"""
     print("Zero-Bucket Background processor started...")
-    docs_ref = db.collection("extractions").where("status", "in", ["QUEUED", "PROCESSING"]).stream()
+    docs_ref = db.collection("extractions").where("status", "in", ["QUEUED", "PROCESSING", "FAILED"]).stream()
     
     count = 0
     for doc in docs_ref:

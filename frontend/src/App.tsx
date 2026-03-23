@@ -229,7 +229,7 @@ export default function App() {
   };
 
   const startProcessing = async () => {
-    if (queue.filter(r => r.status === 'QUEUED').length === 0) return;
+    if (queue.filter(r => r.status === 'QUEUED' || r.status === 'FAILED').length === 0) return;
     
     setHasStartedProcessing(true);
     setIsProcessing(true);

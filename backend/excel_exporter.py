@@ -16,12 +16,6 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str):
         ws = wb.active
         ws.title = "Petty Cash Log"
 
-    # Define Styles
-    header_font = Font(name='Arial', size=16, bold=True, color='FF0000') # Red
-    sub_header_font = Font(name='Arial', size=11, bold=True)
-    table_header_font = Font(name='Arial', size=10, bold=True)
-    purple_fill = PatternFill(start_color='7030A0', end_color='7030A0', fill_type='solid') # Purple
-    border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
     bhd_format = '"BHD" #,##0.000'
 
     # --- Date Sorting Logic ---
@@ -80,15 +74,9 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str):
     try:
         ws['D3'] = current_balance
         ws['D3'].number_format = bhd_format
-        ws['D3'].font = Font(bold=True, color='FFFFFF')
-        ws['D3'].alignment = Alignment(horizontal='center')
     except: pass
 
     # 4. Data Rows (Start exactly at Row 5)
-    # Insert rows first to expand any Excel Tables and push the 'Total' row down
-    if results_to_process:
-        ws.insert_rows(5, amount=len(results_to_process))
-        
     row_idx = 5
     running_balance = 0
     
