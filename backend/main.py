@@ -104,7 +104,7 @@ async def run_batch_processor():
 async def upload_batch(files: List[UploadFile] = File(...)):
     """Save multiple files to FIREBASE storage and create queue records"""
     uploaded_ids = []
-    print(f"Received batch upload to Firebase: {len(files)} files")
+    print(f"DEBUG: Received batch upload to Firebase: {len(files)} files")
     
     try:
         for file in files:
@@ -116,24 +116,30 @@ async def upload_batch(files: List[UploadFile] = File(...)):
                 "data": None
             })
             doc_id = doc_ref[1].id
+            print(f"DEBUG: Created Firestore record doc_id={doc_id} for {file.filename}")
             
             # 2. Save to Firebase Storage
             content = await file.read()
             blob_path = f"uploads/{doc_id}/{file.filename}"
+            print(f"DEBUG: Uploading to Firebase Storage blob_path={blob_path}")
             blob = bucket.blob(blob_path)
             blob.upload_from_string(content, content_type=file.content_type)
+            print(f"DEBUG: Firebase Storage Upload SUCCESS for {blob_path}")
             
             # 3. Update Firestore with storage path
             db.collection("extractions").document(doc_id).update({
                 "storage_path": blob_path,
                 "content_type": file.content_type
             })
+            print(f"DEBUG: Firestore updated with storage_path={blob_path}")
             uploaded_ids.append(doc_id)
             
-        print(f"Firebase batch upload success: {len(uploaded_ids)} files")
+        print(f"DEBUG: Final uploaded_ids={uploaded_ids}")
         return {"status": "success", "count": len(uploaded_ids), "ids": uploaded_ids}
     except Exception as e:
-        print(f"Upload error: {e}")
+        print(f"DEBUG ERROR during upload_batch: {e}")
+        import traceback
+        traceback.print_exc()
         return {"status": "error", "message": str(e)}
 
 @app.post("/clear-queue")

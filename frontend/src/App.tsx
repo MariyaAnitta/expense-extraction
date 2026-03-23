@@ -16,6 +16,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const APP_VERSION = "v1.2 - Firebase Persistent";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -86,6 +87,12 @@ const StatCard = ({ icon: Icon, label, value, subtext, trend, colorClass }: { ic
 export default function App() {
   const [queue, setQueue] = useState<ExtractionResult[]>([]);
   const [selectedResult, setSelectedResult] = useState<ExtractionResult | null>(null);
+  
+  useEffect(() => {
+    console.log("%c 🚀 EXPENSE PORTAL v1.2 LIVE ", "background: #4f46e5; color: white; font-size: 20px; font-weight: bold; padding: 10px; border-radius: 5px;");
+    console.log("Backend URL:", API_URL);
+    console.log("App Version:", APP_VERSION);
+  }, []);
   const [isProcessing, setIsProcessing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [hasStartedProcessing, setHasStartedProcessing] = useState(false);
@@ -512,7 +519,7 @@ export default function App() {
               <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden min-h-[500px]">
                 <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <h3 className="text-lg font-display font-bold text-slate-800 tracking-tight">Document Queue</h3>
+                    <h3 className="text-lg font-display font-bold text-slate-800 tracking-tight">Document Queue <span className="text-[10px] text-slate-300 font-mono ml-2 uppercase opacity-50">{APP_VERSION}</span></h3>
                     <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">{queue.length} TOTAL</span>
                   </div>
                   <div className="flex items-center gap-2">
