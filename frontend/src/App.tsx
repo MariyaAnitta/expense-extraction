@@ -689,7 +689,7 @@ export default function App() {
                             <div className="relative group">
                               <input 
                                 type="date" 
-                                className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-6 pr-12 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                                className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 pr-10 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
                                 value={(() => {
                                   const d = selectedResult?.data?.date;
                                   if (!d) return '';

@@ -42,13 +42,13 @@ if not firebase_admin._apps:
         cred_dict = json.loads(firebase_creds_json)
         cred = credentials.Certificate(cred_dict)
         firebase_admin.initialize_app(cred, {'storageBucket': bucket_name})
-        print("Firebase initialized from FIREBASE_CREDENTIALS_JSON env var")
+        print(f"Firebase initialized (Bucket: {bucket_name}) from FIREBASE_CREDENTIALS_JSON")
     elif service_account_path and os.path.exists(service_account_path):
         cred = credentials.Certificate(service_account_path)
         firebase_admin.initialize_app(cred, {'storageBucket': bucket_name})
-        print(f"Firebase initialized from file: {service_account_path}")
+        print(f"Firebase initialized (Bucket: {bucket_name}) from file: {service_account_path}")
     else:
-        print("WARNING: No Firebase credentials found. Falling back to default.")
+        print(f"WARNING: No Firebase credentials found. Falling back to default (Bucket: {bucket_name}).")
         firebase_admin.initialize_app(options={'storageBucket': bucket_name})
 
 db = firestore.client()
