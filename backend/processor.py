@@ -136,6 +136,13 @@ class ReceiptProcessor:
                     json_str = json_str[4:]
             
             data_dict = json.loads(json_str)
+            
+            # Handle cases where Gemini returns a list instead of a dict
+            if isinstance(data_dict, list) and len(data_dict) > 0:
+                data_dict = data_dict[0]
+            elif isinstance(data_dict, list):
+                raise ValueError("Gemini returned an empty list")
+
             print(f"DEBUG: Parsed data_dict keys: {list(data_dict.keys())}")
             
             # Basic validation/mapping for critical fields

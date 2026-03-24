@@ -111,10 +111,19 @@ async def run_batch_processor():
             image_url = None
             if result.status in ["COMPLETED", "AMBER"] and supabase:
                 try:
+                    import mimetypes
+                    mime_type, _ = mimetypes.guess_type(file_name)
+                    if not mime_type:
+                        mime_type = "application/octet-stream"
+                    
                     # Fix: Directly use filename (no redundant receipts/ prefix)
                     target_path = f"{int(time.time())}_{file_name}"
                     with open(temp_path, "rb") as f:
-                        upload_res = supabase.storage.from_("receipts").upload(target_path, f.read())
+                        upload_res = supabase.storage.from_("receipts").upload(
+                            target_path, 
+                            f.read(),
+                            file_options={"content-type": mime_type}
+                        )
                         print(f"Supabase Response: {upload_res}")
                     
                     # Get public URL
