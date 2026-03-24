@@ -144,10 +144,12 @@ async def run_batch_processor():
             }
             db.collection("extractions").document(doc_id).update(update_data)
             
-            # 4. Cleanup: DELETE the local file from Render disk
-            if os.path.exists(temp_path):
+            # 4. Cleanup: DELETE the local file from Render disk (Only if not FAILED)
+            if result.status != "FAILED" and os.path.exists(temp_path):
                 os.remove(temp_path)
                 print(f"SUCCESS: Result saved and temp file deleted for {file_name}")
+            elif result.status == "FAILED":
+                print(f"WARNING: Extraction FAILED for {file_name}. Preserving local file for retry.")
                 
         except Exception as e:
             print(f"Error processing {file_name}: {e}")
@@ -172,7 +174,7 @@ async def upload_batch(files: List[UploadFile] = File(...)):
         for file in files:
             # 1. Create a Firestore record
             doc_ref = db.collection("extractions").add({
-                "name": file.filename,
+                "name": os.path.basename(file.filename),
                 "status": "QUEUED",
                 "upload_time": time.time(),
                 "data": None
