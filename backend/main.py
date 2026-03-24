@@ -241,12 +241,15 @@ async def process_batch(background_tasks: BackgroundTasks):
 @app.get("/export-excel")
 async def export_excel():
     try:
-        # Fetch COMPLETED results
-        docs_ref = db.collection("extractions").where("status", "==", "COMPLETED").stream()
+        # Fetch ONLY COMPLETED and VERIFIED results
+        docs_ref = db.collection("extractions")\
+            .where("status", "in", ["COMPLETED", "AMBER"])\
+            .where("is_verified", "==", True)\
+            .stream()
+        
         results = []
         for doc in docs_ref:
             data = doc.to_dict()
-            # Create an ExtractionResult object for the exporter
             res = ExtractionResult(
                 file_id=doc.id,
                 file_name=data.get("name", "Unknown File"),

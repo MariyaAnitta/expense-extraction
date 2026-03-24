@@ -4,7 +4,7 @@ import {
   Download, Trash2, Search, Filter, 
   ChevronRight, ChevronDown, LayoutDashboard, ShieldCheck, 
   TrendingUp, Zap, FolderOpen,
-  Plus, Layers, Loader2, Eye
+  Plus, Layers, Loader2, Eye, Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from './lib/firebase';
@@ -794,17 +794,23 @@ export default function App() {
                           />
                         </div>
                       </div>
-
-
-
-                      <div className="pt-4">
-                         <button 
-                           onClick={handleConfirm}
-                           className="w-full bg-slate-900 hover:bg-black text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-slate-200 flex items-center justify-center gap-2 group transition-all active:scale-[0.98]"
-                         >
-                           Confirm Details <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
-                         </button>
-                      </div>
+                        <div className="pt-4">
+                           <button 
+                             onClick={handleConfirm}
+                             disabled={selectedResult?.is_verified}
+                             className={`w-full py-4 rounded-2xl font-black text-sm shadow-xl flex items-center justify-center gap-2 group transition-all ${
+                               selectedResult?.is_verified 
+                                 ? "bg-emerald-500 text-white cursor-not-allowed shadow-emerald-100" 
+                                 : "bg-slate-900 hover:bg-black text-white shadow-slate-200 active:scale-[0.98]"
+                             }`}
+                           >
+                             {selectedResult?.is_verified ? (
+                               <>Details Confirmed <Check size={18} /></>
+                             ) : (
+                               <>Confirm Details <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" /></>
+                             )}
+                           </button>
+                        </div>
                     </div>
                 )}
               </div>
