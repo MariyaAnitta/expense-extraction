@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 import time
 import tempfile
 from typing import List, Optional
@@ -30,6 +31,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(f"GLOBAL ERROR: {exc}")
+    # Always return CORS headers manually if needed, 
+    # but FastAPI's CORSMiddleware should handle this if we return a JSONResponse
+    return JSONResponse(
+        status_code=500,
+        content={"status": "error", "message": str(exc)},
+    )
 
 @app.get("/")
 async def root():
