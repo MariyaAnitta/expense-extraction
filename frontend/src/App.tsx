@@ -861,12 +861,23 @@ export default function App() {
                               </>
                             ) : (
                               <div className="flex flex-col items-center">
-                                <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4">
-                                  <Loader2 size={24} className="text-indigo-200 animate-spin" />
-                                </div>
-                                <p className="text-[11px] text-slate-300 font-bold">
-                                  Generating preview...
-                                </p>
+                                {selectedResult?.status === 'COMPLETED' || selectedResult?.status === 'FAILED' ? (
+                                  <>
+                                    <FileText size={32} className="text-slate-200 mb-4" />
+                                    <p className="text-[11px] text-slate-300 font-bold">
+                                      Preview Unavailable
+                                    </p>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4">
+                                      <Loader2 size={24} className="text-indigo-200 animate-spin" />
+                                    </div>
+                                    <p className="text-[11px] text-slate-300 font-bold">
+                                      Generating preview...
+                                    </p>
+                                  </>
+                                )}
                               </div>
                             )}
                           </div>

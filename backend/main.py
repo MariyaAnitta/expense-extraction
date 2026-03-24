@@ -92,12 +92,13 @@ async def run_batch_processor():
             
             # 2. Upload to Supabase for permanent viewing (if successful)
             image_url = None
-            if result.status == "COMPLETED" and supabase:
+            if result.status in ["COMPLETED", "AMBER"] and supabase:
                 try:
-                    # Use a unique path in Supabase bucket
-                    target_path = f"receipts/{int(time.time())}_{file_name}"
+                    # Fix: Directly use filename (no redundant receipts/ prefix)
+                    target_path = f"{int(time.time())}_{file_name}"
                     with open(temp_path, "rb") as f:
-                        supabase.storage.from_("receipts").upload(target_path, f.read())
+                        upload_res = supabase.storage.from_("receipts").upload(target_path, f.read())
+                        print(f"Supabase Response: {upload_res}")
                     
                     # Get public URL
                     res = supabase.storage.from_("receipts").get_public_url(target_path)
