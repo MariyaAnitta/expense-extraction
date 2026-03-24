@@ -64,6 +64,23 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def root():
     return {"message": "Expense Extraction Portal API is running"}
 
+@app.get("/debug-supabase")
+async def debug_supabase():
+    if not supabase:
+        return {"status": "error", "message": "Supabase client not initialized. Check ENV vars."}
+    try:
+        # Test connection by listing buckets
+        buckets = supabase.storage.list_buckets()
+        bucket_exists = any(b.name == "receipts" for b in buckets)
+        return {
+            "status": "connected",
+            "bucket_found": bucket_exists,
+            "buckets": [b.name for b in buckets],
+            "supabase_url": supabase_url[:15] + "..." # Partial for security
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 import asyncio
 
 async def run_batch_processor():
