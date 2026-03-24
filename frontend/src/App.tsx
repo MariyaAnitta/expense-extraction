@@ -45,6 +45,7 @@ interface ExtractionResult {
   data: ReceiptData | null;
   error?: string;
   is_verified?: boolean;
+  image_url?: string;
 }
 
 // --- Components ---
@@ -820,6 +821,55 @@ export default function App() {
                                <>Confirm Details <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" /></>
                              )}
                            </button>
+                        </div>
+
+                        {/* Document Preview */}
+                        <div className="mt-8 pt-8 border-t border-slate-100">
+                          <div className="flex items-center justify-between mb-4">
+                            <label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.1em] ml-1">DOCUMENT PREVIEW</label>
+                            {selectedResult?.image_url && (
+                              <a 
+                                href={selectedResult.image_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-indigo-600 font-bold hover:underline flex items-center gap-1"
+                              >
+                                View Full <ChevronRight size={12} />
+                              </a>
+                            )}
+                          </div>
+                          
+                          <div className="aspect-[4/3] w-full bg-slate-50 rounded-3xl border-2 border-dashed border-slate-100 flex flex-col items-center justify-center p-6 text-center group relative overflow-hidden">
+                            {selectedResult?.image_url ? (
+                              <>
+                                {selectedResult.file_name?.toLowerCase().endsWith('.pdf') ? (
+                                  <div className="flex flex-col items-center">
+                                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4 text-slate-300 group-hover:scale-110 transition-transform duration-500">
+                                      <FileText size={32} />
+                                    </div>
+                                    <p className="text-[11px] text-slate-400 font-bold max-w-[200px] truncate px-4">
+                                      {selectedResult.file_name}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <img 
+                                    src={selectedResult.image_url} 
+                                    alt="Preview" 
+                                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                                  />
+                                )}
+                              </>
+                            ) : (
+                              <div className="flex flex-col items-center">
+                                <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4">
+                                  <Loader2 size={24} className="text-indigo-200 animate-spin" />
+                                </div>
+                                <p className="text-[11px] text-slate-300 font-bold">
+                                  Generating preview...
+                                </p>
+                              </div>
+                            )}
+                          </div>
                         </div>
                     </div>
                 )}
