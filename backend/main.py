@@ -128,7 +128,7 @@ async def run_batch_processor():
                     
                     # Get public URL
                     res = supabase.storage.from_("receipts").get_public_url(target_path)
-                    image_url = res
+                    image_url = str(res) # Ensure it's a string
                     print(f"Supabase Upload Success: {image_url}")
                 except Exception as upload_err:
                     print(f"Supabase Upload Failed for {file_name}: {upload_err}")

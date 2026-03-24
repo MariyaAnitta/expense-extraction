@@ -88,6 +88,16 @@ const StatCard = ({ icon: Icon, label, value, subtext, trend, colorClass }: { ic
 export default function App() {
   const [queue, setQueue] = useState<ExtractionResult[]>([]);
   const [selectedResult, setSelectedResult] = useState<ExtractionResult | null>(null);
+
+  // Sync selected results with background updates
+  useEffect(() => {
+    if (selectedResult) {
+       const latest = queue.find(item => item.file_id === selectedResult.file_id);
+       if (latest && JSON.stringify(latest) !== JSON.stringify(selectedResult)) {
+         setSelectedResult(latest);
+       }
+    }
+  }, [queue, selectedResult]);
   
   useEffect(() => {
     console.log("%c 🚀 EXPENSE PORTAL v1.2 LIVE ", "background: #4f46e5; color: white; font-size: 20px; font-weight: bold; padding: 10px; border-radius: 5px;");
@@ -144,7 +154,8 @@ export default function App() {
           status: data.status,
           data: data.data || null,
           error: data.error,
-          is_verified: data.is_verified || false
+          is_verified: data.is_verified || false,
+          image_url: data.image_url
         };
       });
 
