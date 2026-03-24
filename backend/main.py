@@ -11,6 +11,7 @@ from processor import ReceiptProcessor
 from excel_exporter import generate_petty_cash_log
 from models import ExtractionResult, ReceiptData
 from dotenv import load_dotenv
+from supabase import create_client, Client
 
 # Load from specific backend folder
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -20,6 +21,20 @@ if os.path.exists(dotenv_path):
     load_dotenv(dotenv_path)
 else:
     print(f"ERROR: .env file not found at {dotenv_path}")
+
+# Initialize Supabase
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_KEY")
+supabase: Optional[Client] = None
+
+if supabase_url and supabase_key:
+    try:
+        supabase = create_client(supabase_url, supabase_key)
+        print("Supabase connected successfully")
+    except Exception as e:
+        print(f"Supabase Connection Failed: {e}")
+else:
+    print("WARNING: SUPABASE_URL or SUPABASE_KEY missing in .env")
 
 app = FastAPI(title="Expense Extraction API")
 processor = ReceiptProcessor()
@@ -72,20 +87,37 @@ async def run_batch_processor():
             print(f"Processing {file_name}...")
             db.collection("extractions").document(doc_id).update({"status": "PROCESSING"})
             
-            # Process the file
+            # 1. Process the AI Extraction
             result = processor.process_file(temp_path)
             
-            # Update Firestore
+            # 2. Upload to Supabase for permanent viewing (if successful)
+            image_url = None
+            if result.status == "COMPLETED" and supabase:
+                try:
+                    # Use a unique path in Supabase bucket
+                    target_path = f"receipts/{int(time.time())}_{file_name}"
+                    with open(temp_path, "rb") as f:
+                        supabase.storage.from_("receipts").upload(target_path, f.read())
+                    
+                    # Get public URL
+                    res = supabase.storage.from_("receipts").get_public_url(target_path)
+                    image_url = res
+                    print(f"Supabase Upload Success: {image_url}")
+                except Exception as upload_err:
+                    print(f"Supabase Upload Failed for {file_name}: {upload_err}")
+            
+            # 3. Update Firestore with all data + the new image_url
             update_data = {
                 "status": result.status,
                 "confidence": result.data.confidence if result.data else 0,
                 "data": result.data.model_dump() if result.data else None,
                 "error": result.error,
+                "image_url": image_url,
                 "temp_local_path": None # Clear from DB
             }
             db.collection("extractions").document(doc_id).update(update_data)
             
-            # Cleanup: DELETE the local file immediately after processing
+            # 4. Cleanup: DELETE the local file from Render disk
             if os.path.exists(temp_path):
                 os.remove(temp_path)
                 print(f"SUCCESS: Result saved and temp file deleted for {file_name}")

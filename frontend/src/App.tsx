@@ -794,11 +794,21 @@ export default function App() {
                           />
                         </div>
                       </div>
-                        <div className="pt-4">
+                        <div className="pt-4 flex gap-3">
+                           {selectedResult?.image_url && (
+                             <a 
+                               href={selectedResult.image_url} 
+                               target="_blank" 
+                               rel="noopener noreferrer"
+                               className="flex-[0.4] bg-slate-100 hover:bg-slate-200 text-slate-600 py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                             >
+                                <Eye size={18} /> View
+                             </a>
+                           )}
                            <button 
                              onClick={handleConfirm}
                              disabled={selectedResult?.is_verified}
-                             className={`w-full py-4 rounded-2xl font-black text-sm shadow-xl flex items-center justify-center gap-2 group transition-all ${
+                             className={`flex-1 py-4 rounded-2xl font-black text-sm shadow-xl flex items-center justify-center gap-2 group transition-all ${
                                selectedResult?.is_verified 
                                  ? "bg-emerald-500 text-white cursor-not-allowed shadow-emerald-100" 
                                  : "bg-slate-900 hover:bg-black text-white shadow-slate-200 active:scale-[0.98]"

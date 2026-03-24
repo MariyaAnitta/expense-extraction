@@ -10,3 +10,4 @@ python-multipart>=0.0.12
 python-dotenv>=1.0.1
 pillow>=10.4.0
 pydantic>=2.9.0
+supabase>=2.10.0
