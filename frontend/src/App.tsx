@@ -384,51 +384,6 @@ export default function App() {
         {/* Dashboard Content */}
         <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
           
-          {(() => {
-            const activeItems = queue.filter(r => r.status === 'PROCESSING' || r.status === 'QUEUED');
-            const completedCount = queue.filter(r => r.status === 'COMPLETED' || r.status === 'FAILED').length;
-            const totalCount = queue.length;
-            
-            // Only show if there's actual active work and we've triggered it
-            const isActive = activeItems.length > 0 && isProcessing;
-
-            if (!isActive) return null;
-
-            return (
-              <motion.div 
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                className="bg-indigo-600 text-white px-6 py-3 rounded-2xl flex items-center justify-between shadow-xl shadow-indigo-100 overflow-hidden mb-6"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <Loader2 className="animate-spin" size={20} />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-1 h-1 bg-white rounded-full animate-pulse"></div>
-                    </div>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="font-bold text-sm">
-                      {activeItems.length === 0 ? 'All extractions completed!' : `Extracting ${activeItems.length} documents...`}
-                    </span>
-                    <div className="w-48 h-1 bg-white/20 rounded-full mt-1 overflow-hidden">
-                      <motion.div 
-                        className="h-full bg-white"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${(completedCount / totalCount) * 100}%` }}
-                        transition={{ duration: 0.5 }}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-col items-end">
-                  <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Live Engine</span>
-                  <span className="text-[9px] font-medium opacity-60">Throttled for accuracy</span>
-                </div>
-              </motion.div>
-            );
-          })()}
-          
           {/* Stats Row */}
           <div className="grid grid-cols-3 gap-6">
             <StatCard 
