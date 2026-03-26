@@ -203,6 +203,7 @@ async def upload_batch(files: List[UploadFile] = File(...)):
 
 from fastapi import Header
 import base64
+import mimetypes
 
 @app.post("/upload-automation")
 async def upload_automation(request: Request, background_tasks: BackgroundTasks, x_filename: str = Header(None)):
@@ -213,7 +214,7 @@ async def upload_automation(request: Request, background_tasks: BackgroundTasks,
         if "application/json" in content_type:
             # Case 1: JSON with Base64 Content
             data = await request.json()
-            filename = data.get("filename") or x_filename or f"Teams_Upload_{int(time.time())}.pdf"
+            filename = data.get("filename") or x_filename or f"Teams_Upload_{int(time.time())}"
             base64_file = data.get("file")
             if not base64_file:
                 return {"status": "error", "message": "JSON body must have 'file' key with base64 string"}
@@ -221,12 +222,19 @@ async def upload_automation(request: Request, background_tasks: BackgroundTasks,
             print(f"DEBUG: Processing base64 automation upload: {filename}")
         else:
             # Case 2: Raw Binary
-            filename = x_filename or f"Teams_Upload_{int(time.time())}.pdf"
+            filename = x_filename or f"Teams_Upload_{int(time.time())}"
             content = await request.body()
             print(f"DEBUG: Processing raw binary automation upload: {filename}")
             
         if not content:
             return {"status": "error", "message": "File content is empty"}
+
+        # Ensure filename has an extension for Pulse OCR compatibility
+        if "." not in filename:
+            # Guess extension from MIME type or default to .jpg
+            ext = mimetypes.guess_extension(content_type) or ".jpg"
+            filename += ext
+            print(f"Inferred extension: {filename}")
 
         # 2. Create a Firestore record
         doc_ref = db.collection("extractions").add({
