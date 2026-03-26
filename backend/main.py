@@ -161,7 +161,7 @@ async def run_batch_processor():
     print(f"Zero-Bucket batch task finished. Total: {count}")
 
 @app.post("/upload-batch")
-async def upload_batch(files: List[UploadFile] = File(...)):
+async def upload_batch(background_tasks: BackgroundTasks, files: List[UploadFile] = File(...)):
     """Save multiple files to TEMPORARY local storage for processing"""
     uploaded_ids = []
     print(f"DEBUG: Processing batch upload in Zero-Bucket mode: {len(files)} files")
@@ -195,6 +195,9 @@ async def upload_batch(files: List[UploadFile] = File(...)):
                 "temp_local_path": local_path
             })
             uploaded_ids.append(doc_id)
+            
+        # --- AUTO-TRIGGER the AI processor for manual uploads ---
+        background_tasks.add_task(run_batch_processor)
             
         return {"status": "success", "count": len(uploaded_ids), "ids": uploaded_ids}
     except Exception as e:
