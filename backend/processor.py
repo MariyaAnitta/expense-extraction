@@ -136,6 +136,14 @@ class ReceiptProcessor:
                     json_str = json_str[4:]
             
             data_dict = json.loads(json_str)
+            
+            # Fix: If Gemini returns a list (sometimes happens with "Extract into JSON" prompt), take the first item
+            if isinstance(data_dict, list) and len(data_dict) > 0:
+                data_dict = data_dict[0]
+                
+            if not isinstance(data_dict, dict):
+                raise ValueError(f"AI returned {type(data_dict).__name__} instead of a dictionary object.")
+
             print(f"DEBUG: Parsed data_dict keys: {list(data_dict.keys())}")
             
             # Basic validation/mapping for critical fields
@@ -148,25 +156,8 @@ class ReceiptProcessor:
             return ReceiptData(**data_dict)
         except Exception as e:
             print(f"DEBUG ERROR: Vertex AI Structure Failed: {e}")
-            # Return a valid but empty record so the table doesn't break
-            error_msg_str = str(e)
-            if not error_msg_str:
-                error_msg_str = "Unknown Error"
-                
-            # Use max length limit explicitly
-            limit = 50
-            if len(error_msg_str) > limit:
-                short_error = error_msg_str[0:50]
-            else:
-                short_error = error_msg_str
-            
-            return ReceiptData(
-                date=datetime.now().strftime("%d/%m/%Y"),
-                description=f"Analysis Error: {short_error}",
-                amount=0.0,
-                confidence=0.0,
-                remarks="ERROR"
-            )
+            # Re-raise so the calling process_file method correctly marks it as FAILED
+            raise
 
     def process_file(self, file_path: str) -> ExtractionResult:
         """Complete pipeline: Pulse OCR -> Vertex AI Structure"""
