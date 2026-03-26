@@ -201,6 +201,54 @@ async def upload_batch(files: List[UploadFile] = File(...)):
         print(f"DEBUG ERROR during upload: {e}")
         return {"status": "error", "message": str(e)}
 
+from fastapi import Header
+
+@app.post("/upload-automation")
+async def upload_automation(request: Request, background_tasks: BackgroundTasks, x_filename: str = Header(None)):
+    """Special endpoint for Power Automate to send raw binary file content"""
+    try:
+        filename = x_filename or f"Teams_Upload_{int(time.time())}.pdf"
+        print(f"DEBUG: Processing automation upload: {filename}")
+        
+        # 1. Read raw binary body
+        content = await request.body()
+        if not content:
+            return {"status": "error", "message": "Raw body is empty"}
+
+        # 2. Create a Firestore record
+        doc_ref = db.collection("extractions").add({
+            "name": filename,
+            "status": "QUEUED",
+            "upload_time": time.time(),
+            "data": None
+        })
+        doc_id = doc_ref[1].id
+        
+        # 3. Save locally (Temporary)
+        uploads_dir = os.path.join(tempfile.gettempdir(), "receipt_uploads")
+        os.makedirs(uploads_dir, exist_ok=True)
+        local_path = os.path.join(uploads_dir, f"{doc_id}_{filename}")
+        
+        with open(local_path, "wb") as f:
+            f.write(content)
+            
+        # 4. Update Firestore
+        db.collection("extractions").document(doc_id).update({
+            "temp_local_path": local_path
+        })
+
+        # 5. AUTO-TRIGGER the AI processor
+        background_tasks.add_task(run_batch_processor)
+            
+        return {
+            "status": "success", 
+            "id": doc_id, 
+            "message": "File received and AI processing started automatically."
+        }
+    except Exception as e:
+        print(f"DEBUG ERROR during automation upload: {e}")
+        return {"status": "error", "message": str(e)}
+
 @app.post("/clear-queue")
 async def clear_queue():
     """Clear all records and files from storage"""
