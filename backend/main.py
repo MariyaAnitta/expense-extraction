@@ -229,12 +229,21 @@ async def upload_automation(request: Request, background_tasks: BackgroundTasks,
         if not content:
             return {"status": "error", "message": "File content is empty"}
 
-        # Ensure filename has an extension for Pulse OCR compatibility
+        # --- SMART EXTENSION FIX: Inspect magic bytes ---
         if "." not in filename:
-            # Guess extension from MIME type or default to .jpg
-            ext = mimetypes.guess_extension(content_type) or ".jpg"
-            filename += ext
-            print(f"Inferred extension: {filename}")
+            # Default to .jpg
+            real_ext = ".jpg"
+            if content.startswith(b"%PDF-"):
+                real_ext = ".pdf"
+            elif content.startswith(b"\x89PNG\r\n\x1a\n"):
+                real_ext = ".png"
+            elif content.startswith(b"\xff\xd8\xff"):
+                real_ext = ".jpg"
+            elif content.startswith(b"PK\x03\x04"): # Office files (DOCX/XLSX)
+                real_ext = ".docx" # Simple default for zip-based office files
+            
+            filename += real_ext
+            print(f"Inferred real extension from bytes: {filename}")
 
         # 2. Create a Firestore record
         doc_ref = db.collection("extractions").add({
