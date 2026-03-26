@@ -233,7 +233,9 @@ async def upload_automation(request: Request, background_tasks: BackgroundTasks,
             return {"status": "error", "message": "File content is empty"}
 
         # --- SMART EXTENSION FIX: Inspect magic bytes ---
-        if "." not in filename:
+        # Fixed: Check for actual file extension at the end (dots in mid-filename shouldn't fool us)
+        supported_extensions = ('.pdf', '.jpg', '.jpeg', '.png', '.docx', '.xlsx', '.msg')
+        if not filename.lower().endswith(supported_extensions):
             # Default to .jpg
             real_ext = ".jpg"
             if content.startswith(b"%PDF-"):
@@ -243,7 +245,7 @@ async def upload_automation(request: Request, background_tasks: BackgroundTasks,
             elif content.startswith(b"\xff\xd8\xff"):
                 real_ext = ".jpg"
             elif content.startswith(b"PK\x03\x04"): # Office files (DOCX/XLSX)
-                real_ext = ".docx" # Simple default for zip-based office files
+                real_ext = ".docx" 
             
             filename += real_ext
             print(f"Inferred real extension from bytes: {filename}")
