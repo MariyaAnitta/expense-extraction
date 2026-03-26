@@ -202,18 +202,31 @@ async def upload_batch(files: List[UploadFile] = File(...)):
         return {"status": "error", "message": str(e)}
 
 from fastapi import Header
+import base64
 
 @app.post("/upload-automation")
 async def upload_automation(request: Request, background_tasks: BackgroundTasks, x_filename: str = Header(None)):
-    """Special endpoint for Power Automate to send raw binary file content"""
+    """Special endpoint for Power Automate to send raw binary OR Base64 JSON."""
     try:
-        filename = x_filename or f"Teams_Upload_{int(time.time())}.pdf"
-        print(f"DEBUG: Processing automation upload: {filename}")
+        content_type = request.headers.get("Content-Type", "")
         
-        # 1. Read raw binary body
-        content = await request.body()
+        if "application/json" in content_type:
+            # Case 1: JSON with Base64 Content
+            data = await request.json()
+            filename = data.get("filename") or x_filename or f"Teams_Upload_{int(time.time())}.pdf"
+            base64_file = data.get("file")
+            if not base64_file:
+                return {"status": "error", "message": "JSON body must have 'file' key with base64 string"}
+            content = base64.b64decode(base64_file)
+            print(f"DEBUG: Processing base64 automation upload: {filename}")
+        else:
+            # Case 2: Raw Binary
+            filename = x_filename or f"Teams_Upload_{int(time.time())}.pdf"
+            content = await request.body()
+            print(f"DEBUG: Processing raw binary automation upload: {filename}")
+            
         if not content:
-            return {"status": "error", "message": "Raw body is empty"}
+            return {"status": "error", "message": "File content is empty"}
 
         # 2. Create a Firestore record
         doc_ref = db.collection("extractions").add({
