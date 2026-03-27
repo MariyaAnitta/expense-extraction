@@ -7,10 +7,12 @@ import {
   Plus, Layers, Loader2, Eye, Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { db } from './lib/firebase';
+import { auth, db } from './lib/firebase';
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { 
-  collection, onSnapshot, query, orderBy 
+  collection, onSnapshot, query, orderBy, doc, getDoc
 } from 'firebase/firestore';
+import Login from './components/Login';
 import axios from 'axios';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -86,8 +88,37 @@ const StatCard = ({ icon: Icon, label, value, subtext, trend, colorClass }: { ic
 );
 
 export default function App() {
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  
   const [queue, setQueue] = useState<ExtractionResult[]>([]);
   const [selectedResult, setSelectedResult] = useState<ExtractionResult | null>(null);
+
+  // Verify auth state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        setAuthUser(currentUser);
+        try {
+          const docRef = doc(db, 'users', currentUser.uid);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists() && docSnap.data().role) {
+            setUserRole(docSnap.data().role);
+          } else {
+            setUserRole('user'); // Default fallback
+          }
+        } catch (e) {
+          console.error("Failed to fetch user role", e);
+        }
+      } else {
+        setAuthUser(null);
+        setUserRole(null);
+      }
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Sync selected results with background updates
   useEffect(() => {
@@ -318,6 +349,19 @@ export default function App() {
     ));
   };
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#F5F2EA] flex flex-col justify-center items-center">
+        <Loader2 className="animate-spin text-indigo-600 mb-4" size={32} />
+        <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em]">Authenticating...</p>
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return <Login />;
+  }
+
   return (
     <div className="min-h-screen bg-[#F5F2EA] text-slate-900 font-sans selection:bg-indigo-100 flex overflow-hidden">
       {/* --- Sidebar --- */}
@@ -330,8 +374,13 @@ export default function App() {
           <SidebarItem icon={LayoutDashboard} label="Board" active />
         </nav>
 
-        <div className="w-10 h-10 rounded-full bg-slate-100 border-2 border-white shadow-sm overflow-hidden cursor-pointer hover:ring-2 ring-indigo-500/50 transition-all">
-          <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=FinancialExpert" alt="Account" />
+        <div 
+          onClick={() => signOut(auth)}
+          title="Sign Out"
+          className="group relative w-10 h-10 rounded-full bg-slate-100 border-2 border-slate-200 shadow-sm overflow-hidden cursor-pointer hover:ring-2 ring-rose-500 hover:border-rose-500 transition-all flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+        >
+          <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${authUser.email}`} alt="Account" className="w-full h-full object-cover group-hover:opacity-0 absolute" />
+          <svg className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity absolute" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
         </div>
       </aside>
 

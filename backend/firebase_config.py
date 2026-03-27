@@ -2,7 +2,7 @@ import os
 import json
 import tempfile
 import firebase_admin
-from firebase_admin import credentials, storage, firestore
+from firebase_admin import credentials, storage, firestore, auth
 from dotenv import load_dotenv
 
 # Load from specific backend folder

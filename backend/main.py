@@ -420,3 +420,37 @@ async def export_excel():
         print(error_msg)
         from fastapi.responses import JSONResponse
         return JSONResponse(status_code=500, content={"error": str(e), "traceback": error_msg})
+
+from pydantic import BaseModel
+
+class CreateUserRequest(BaseModel):
+    email: str
+    password: str
+    role: str
+    team_id: Optional[str] = None
+
+@app.post("/create-user")
+async def create_user(req: CreateUserRequest):
+    try:
+        from firebase_config import auth as admin_auth
+        # Create user in Firebase Auth
+        user_record = admin_auth.create_user(
+            email=req.email,
+            password=req.password
+        )
+        # Store rich metadata in Firestore roles table
+        db.collection("users").document(user_record.uid).set({
+            "uid": user_record.uid,
+            "email": req.email,
+            "role": req.role,
+            "team_id": req.team_id or "General",
+            "status": "active",
+            "created_at": time.time()
+        })
+        return {"status": "success", "uid": user_record.uid, "message": "User created successfully"}
+    except Exception as e:
+        import traceback
+        error_msg = traceback.format_exc()
+        print(f"Error creating user: {error_msg}")
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=400, content={"error": str(e)})
