@@ -13,6 +13,7 @@ import {
   collection, onSnapshot, query, orderBy, doc, getDoc
 } from 'firebase/firestore';
 import Login from './components/Login';
+import AdminUserManagement from './components/AdminUserManagement';
 import axios from 'axios';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -91,6 +92,7 @@ export default function App() {
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [currentView, setCurrentView] = useState<'board' | 'admin'>('board');
   
   const [queue, setQueue] = useState<ExtractionResult[]>([]);
   const [selectedResult, setSelectedResult] = useState<ExtractionResult | null>(null);
@@ -370,8 +372,15 @@ export default function App() {
           <Zap size={24} fill="currentColor" />
         </div>
         
-        <nav className="flex flex-col gap-1 w-full flex-1">
-          <SidebarItem icon={LayoutDashboard} label="Board" active />
+        <nav className="flex flex-col gap-1 w-full flex-1 mt-4 px-2">
+          <div onClick={() => setCurrentView('board')}>
+            <SidebarItem icon={LayoutDashboard} label="Board" active={currentView === 'board'} />
+          </div>
+          {userRole === 'admin' && (
+            <div onClick={() => setCurrentView('admin')}>
+              <SidebarItem icon={ShieldCheck} label="Admin" active={currentView === 'admin'} />
+            </div>
+          )}
         </nav>
 
         <div 
@@ -432,9 +441,12 @@ export default function App() {
 
         {/* Dashboard Content */}
         <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
-          
-          {/* Stats Row */}
-          <div className="grid grid-cols-3 gap-6">
+          {currentView === 'admin' && userRole === 'admin' ? (
+            <AdminUserManagement />
+          ) : (
+            <>
+              {/* Stats Row */}
+              <div className="grid grid-cols-3 gap-6">
             <StatCard 
               icon={TrendingUp} 
               label="Total Expenses" 
@@ -843,6 +855,8 @@ export default function App() {
             </div>
 
           </div>
+          </>
+          )}
         </div>
       </div>
     </div>
