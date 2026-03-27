@@ -47,7 +47,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from fastapi import Request
+from fastapi import Request, Form
 from fastapi.responses import JSONResponse
 
 @app.exception_handler(Exception)
@@ -161,10 +161,15 @@ async def run_batch_processor():
     print(f"Zero-Bucket batch task finished. Total: {count}")
 
 @app.post("/upload-batch")
-async def upload_batch(background_tasks: BackgroundTasks, files: List[UploadFile] = File(...)):
+async def upload_batch(
+    background_tasks: BackgroundTasks, 
+    files: List[UploadFile] = File(...),
+    user_id: str = Form("unknown"),
+    team_id: str = Form("General")
+):
     """Save multiple files to TEMPORARY local storage for processing"""
     uploaded_ids = []
-    print(f"DEBUG: Processing batch upload in Zero-Bucket mode: {len(files)} files")
+    print(f"DEBUG: Processing batch upload for user {user_id} in team {team_id}")
     
     # Use a temporary folder on the local disk (ephemeral on Render)
     uploads_dir = os.path.join(tempfile.gettempdir(), "receipt_uploads")
@@ -177,6 +182,9 @@ async def upload_batch(background_tasks: BackgroundTasks, files: List[UploadFile
                 "name": os.path.basename(file.filename),
                 "status": "QUEUED",
                 "upload_time": time.time(),
+                "user_id": user_id,
+                "team_id": team_id,
+                "is_verified": False,
                 "data": None
             })
             doc_id = doc_ref[1].id
@@ -255,6 +263,9 @@ async def upload_automation(request: Request, background_tasks: BackgroundTasks,
             "name": filename,
             "status": "QUEUED",
             "upload_time": time.time(),
+            "user_id": "automation",
+            "team_id": "Global",
+            "is_verified": False,
             "data": None
         })
         doc_id = doc_ref[1].id
@@ -330,14 +341,27 @@ async def get_file(doc_id: str):
     return {"message": "Preview disabled in Zero-Bucket Free Mode to avoid storage costs. All extracted data is shown on the right."}
 
 @app.post("/update-extraction/{doc_id}")
-async def update_extraction(doc_id: str, data: ReceiptData):
+async def update_extraction(doc_id: str, data: ReceiptData, role: str = "user"):
     """Manually update extraction data (Confirm Details)"""
     try:
-        db.collection("extractions").document(doc_id).update({
+        update_dict = {
             "data": data.model_dump(),
             "status": "COMPLETED",
-            "is_verified": True
-        })
+            "is_verified": True # legacy fallback flag
+        }
+        
+        # Multi-stage RBAC toggles
+        if role == "admin":
+            update_dict["admin_verified"] = True
+            update_dict["leader_verified"] = True
+            update_dict["user_verified"] = True
+        elif role == "leader":
+            update_dict["leader_verified"] = True
+            update_dict["user_verified"] = True
+        else:
+            update_dict["user_verified"] = True
+            
+        db.collection("extractions").document(doc_id).update(update_dict)
         print(f"Extraction {doc_id} manually verified and completed.")
         return {"status": "success"}
     except Exception as e:

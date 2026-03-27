@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { 
-  collection, onSnapshot, query, orderBy, doc, getDoc
+  collection, onSnapshot, query, doc, getDoc, where
 } from 'firebase/firestore';
 import Login from './components/Login';
 import AdminUserManagement from './components/AdminUserManagement';
@@ -48,6 +48,9 @@ interface ExtractionResult {
   data: ReceiptData | null;
   error?: string;
   is_verified?: boolean;
+  user_verified?: boolean;
+  leader_verified?: boolean;
+  admin_verified?: boolean;
   image_url?: string;
 }
 
@@ -91,6 +94,7 @@ const StatCard = ({ icon: Icon, label, value, subtext, trend, colorClass }: { ic
 export default function App() {
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [userData, setUserData] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [currentView, setCurrentView] = useState<'board' | 'admin'>('board');
   
@@ -107,8 +111,10 @@ export default function App() {
           const docSnap = await getDoc(docRef);
           if (docSnap.exists() && docSnap.data().role) {
             setUserRole(docSnap.data().role);
+            setUserData(docSnap.data());
           } else {
             setUserRole('user'); // Default fallback
+            setUserData({ role: 'user', team_id: 'General' });
           }
         } catch (e) {
           console.error("Failed to fetch user role", e);
@@ -116,6 +122,7 @@ export default function App() {
       } else {
         setAuthUser(null);
         setUserRole(null);
+        setUserData(null);
       }
       setAuthLoading(false);
     });
@@ -176,10 +183,21 @@ export default function App() {
     .toLocaleString(undefined, { minimumFractionDigits: 3 });
 
   useEffect(() => {
-    // Listen to the 'extractions' collection (where backend writes)
-    const q = query(collection(db, "extractions"), orderBy("upload_time", "desc"));
+    if (!authUser || !userRole || !userData) return;
+
+    let q;
+    const baseCol = collection(db, "extractions");
+    
+    if (userRole === "admin") {
+      q = query(baseCol); // See everything
+    } else if (userRole === "leader") {
+      q = query(baseCol, where("team_id", "==", userData.team_id || "General"));
+    } else {
+      q = query(baseCol, where("user_id", "==", authUser.uid));
+    }
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const realResults: ExtractionResult[] = snapshot.docs.map(doc => {
+      const realResults: any[] = snapshot.docs.map(doc => {
         const data = doc.data();
         return { 
           file_id: doc.id,
@@ -188,24 +206,29 @@ export default function App() {
           data: data.data || null,
           error: data.error,
           is_verified: data.is_verified || false,
-          image_url: data.image_url
+          user_verified: data.user_verified || false,
+          leader_verified: data.leader_verified || false,
+          admin_verified: data.admin_verified || false,
+          image_url: data.image_url,
+          upload_time: data.upload_time || 0
         };
       });
 
+      // Sort client-side to avoid Firebase composite index errors when mixing where() and orderBy()
+      realResults.sort((a, b) => b.upload_time - a.upload_time);
+
       setQueue(prevQueue => {
         // Keep optimistic items (temp-) that don't have a matching real item yet
-        // A match is found if the real result has the same filename
         const optimisticItems = prevQueue.filter(item => 
           item.file_id.startsWith('temp-') && 
           !realResults.some(real => real.file_name === item.file_name || real.file_name === item.file_name?.split('/').pop())
         );
         
-        // Combine them: Real results (most recent) + remaining optimistic items
         return [...realResults, ...optimisticItems];
       });
     });
     return () => unsubscribe();
-  }, []);
+  }, [authUser, userRole, userData]);
 
   const uploadFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -231,6 +254,10 @@ export default function App() {
       Array.from(files).forEach(file => {
         formData.append('files', file);
       });
+      // Attach identity for RBAC
+      if (authUser?.uid) formData.append('user_id', authUser.uid);
+      if (userData?.team_id) formData.append('team_id', userData.team_id);
+      else formData.append('team_id', 'General');
       
       const response = await axios.post(`${API_URL}/upload-batch`, formData, {
         headers: {
@@ -329,7 +356,7 @@ export default function App() {
         console.log("Manual entry added to database");
         setSelectedResult(null); // Clear panel to indicate success
       } else {
-        await axios.post(`${API_URL}/update-extraction/${selectedResult.file_id}`, selectedResult.data);
+        await axios.post(`${API_URL}/update-extraction/${selectedResult.file_id}?role=${userRole}`, selectedResult.data);
         console.log("Extraction verified and updated.");
         // The Firestore listener will automatically update the UI status to COMPLETED
       }
@@ -835,17 +862,17 @@ export default function App() {
                            )}
                            <button 
                              onClick={handleConfirm}
-                             disabled={selectedResult?.is_verified}
+                             disabled={userRole === 'admin' ? selectedResult?.admin_verified : userRole === 'leader' ? selectedResult?.leader_verified : selectedResult?.user_verified}
                              className={`flex-1 py-4 rounded-2xl font-black text-sm shadow-xl flex items-center justify-center gap-2 group transition-all ${
-                               selectedResult?.is_verified 
+                               (userRole === 'admin' ? selectedResult?.admin_verified : userRole === 'leader' ? selectedResult?.leader_verified : selectedResult?.user_verified)
                                  ? "bg-emerald-500 text-white cursor-not-allowed shadow-emerald-100" 
                                  : "bg-slate-900 hover:bg-black text-white shadow-slate-200 active:scale-[0.98]"
                              }`}
                            >
-                             {selectedResult?.is_verified ? (
-                               <>Details Confirmed <Check size={18} /></>
+                             {(userRole === 'admin' ? selectedResult?.admin_verified : userRole === 'leader' ? selectedResult?.leader_verified : selectedResult?.user_verified) ? (
+                               <>{userRole === 'admin' ? 'Audited' : userRole === 'leader' ? 'Leader Verified' : 'Confirmed'} <Check size={18} /></>
                              ) : (
-                               <>Confirm Details <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" /></>
+                               <>{userRole === 'admin' ? 'Final Audit' : userRole === 'leader' ? 'Verify Team Expense' : 'Confirm Details'} <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" /></>
                              )}
                            </button>
                         </div>
