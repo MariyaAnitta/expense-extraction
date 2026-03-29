@@ -217,25 +217,40 @@ import base64
 import mimetypes
 
 @app.post("/upload-automation")
-async def upload_automation(request: Request, background_tasks: BackgroundTasks, x_filename: str = Header(None)):
+async def upload_automation(
+    request: Request, 
+    background_tasks: BackgroundTasks, 
+    x_filename: str = Header(None),
+    x_team_id: Optional[str] = Header(None),
+    x_user_id: Optional[str] = Header(None)
+):
     """Special endpoint for Power Automate to send raw binary OR Base64 JSON."""
     try:
         content_type = request.headers.get("Content-Type", "")
+        
+        # Use headers if provided, otherwise default to generic automation
+        team_id = x_team_id or "Global"
+        user_id = x_user_id or "automation"
         
         if "application/json" in content_type:
             # Case 1: JSON with Base64 Content
             data = await request.json()
             filename = data.get("filename") or x_filename or f"Teams_Upload_{int(time.time())}"
             base64_file = data.get("file")
+            
+            # Allow JSON body to override headers if needed
+            team_id = data.get("team_id") or team_id
+            user_id = data.get("user_id") or user_id
+            
             if not base64_file:
                 return {"status": "error", "message": "JSON body must have 'file' key with base64 string"}
             content = base64.b64decode(base64_file)
-            print(f"DEBUG: Processing base64 automation upload: {filename}")
+            print(f"DEBUG: Processing base64 automation upload: {filename} for team: {team_id}")
         else:
             # Case 2: Raw Binary
             filename = x_filename or f"Teams_Upload_{int(time.time())}"
             content = await request.body()
-            print(f"DEBUG: Processing raw binary automation upload: {filename}")
+            print(f"DEBUG: Processing raw binary automation upload: {filename} for team: {team_id}")
             
         if not content:
             return {"status": "error", "message": "File content is empty"}
@@ -263,8 +278,8 @@ async def upload_automation(request: Request, background_tasks: BackgroundTasks,
             "name": filename,
             "status": "QUEUED",
             "upload_time": time.time(),
-            "user_id": "automation",
-            "team_id": "Global",
+            "user_id": user_id,
+            "team_id": team_id,
             "is_verified": False,
             "data": None
         })
