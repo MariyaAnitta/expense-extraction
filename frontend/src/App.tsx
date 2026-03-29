@@ -100,6 +100,22 @@ export default function App() {
   
   const [queue, setQueue] = useState<ExtractionResult[]>([]);
   const [selectedResult, setSelectedResult] = useState<ExtractionResult | null>(null);
+  const [teamFilter, setTeamFilter] = useState<string>('Global'); // For Admin filtering
+  const [availableTeams, setAvailableTeams] = useState<string[]>(['General']);
+
+  // Fetch all unique teams for Admin dropdown
+  useEffect(() => {
+    if (userRole !== 'admin') return;
+    const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
+      const teams = new Set<string>(['General']);
+      snapshot.docs.forEach(doc => {
+        const tid = doc.data().team_id;
+        if (tid) teams.add(tid);
+      });
+      setAvailableTeams(Array.from(teams).sort());
+    });
+    return () => unsubscribe();
+  }, [userRole]);
 
   // Verify auth state
   useEffect(() => {
@@ -189,8 +205,13 @@ export default function App() {
     const baseCol = collection(db, "extractions");
     
     if (userRole === "admin") {
-      q = query(baseCol); // See everything
+      if (teamFilter === 'Global') {
+        q = query(baseCol); // Global admin view
+      } else {
+        q = query(baseCol, where("team_id", "==", teamFilter)); // Specific team view
+      }
     } else if (userRole === "leader") {
+      // Leaders see their team's receipts + their own
       q = query(baseCol, where("team_id", "==", userData.team_id || "General"));
     } else {
       q = query(baseCol, where("user_id", "==", authUser.uid));
@@ -333,12 +354,30 @@ export default function App() {
 
   const exportToExcel = async () => {
     try {
-      const response = await axios.get(`${API_URL}/export-excel`, { responseType: 'blob' });
+      // Determine what filters to send to the backend
+      let params = {};
       
+      if (userRole === "admin") {
+        if (teamFilter !== 'Global') params = { team_id: teamFilter };
+      } else if (userRole === "leader") {
+        params = { team_id: userData?.team_id || "General" };
+      } else {
+        params = { user_id: authUser?.uid };
+      }
+
+      const response = await axios.get(`${API_URL}/export-excel`, { 
+        params, 
+        responseType: 'blob' 
+      });
+      
+      const fileName = teamFilter === 'Global' 
+        ? `Global_Petty_Cash_Log_${new Date().toISOString().split('T')[0]}.xlsx`
+        : `Team_${teamFilter}_Log_${new Date().toISOString().split('T')[0]}.xlsx`;
+
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `Petty_Cash_Log_${new Date().toISOString().split('T')[0]}.xlsx`);
+      link.setAttribute('download', fileName);
       document.body.appendChild(link);
       link.click();
       window.URL.revokeObjectURL(url);
@@ -434,7 +473,23 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
+            {/* Admin Team Filter */}
+            {userRole === 'admin' && (
+              <div className="flex items-center gap-3 bg-white/50 backdrop-blur-sm px-4 py-2 rounded-2xl border border-slate-200">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">View Team:</span>
+                <select 
+                  value={teamFilter} 
+                  onChange={(e) => setTeamFilter(e.target.value)}
+                  className="bg-transparent border-none text-sm font-bold text-indigo-600 outline-none cursor-pointer focus:ring-0"
+                >
+                  <option value="Global">All Teams (Global)</option>
+                  {availableTeams.map(team => (
+                    <option key={team} value={team}>{team}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="relative group hidden md:block">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-indigo-500" size={16} />
               <input 

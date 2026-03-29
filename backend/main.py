@@ -407,13 +407,20 @@ async def process_batch(background_tasks: BackgroundTasks):
     return {"status": "batch_processing_triggered"}
 
 @app.get("/export-excel")
-async def export_excel():
+async def export_excel(team_id: Optional[str] = None, user_id: Optional[str] = None):
     try:
-        # Fetch ONLY COMPLETED and VERIFIED results
-        docs_ref = db.collection("extractions")\
+        # Build query for COMPLETED and VERIFIED results
+        docs_ref_query = db.collection("extractions")\
             .where("status", "in", ["COMPLETED", "AMBER"])\
-            .where("is_verified", "==", True)\
-            .stream()
+            .where("is_verified", "==", True)
+            
+        # Apply role-based filters if provided
+        if team_id:
+            docs_ref_query = docs_ref_query.where("team_id", "==", team_id)
+        elif user_id:
+            docs_ref_query = docs_ref_query.where("user_id", "==", user_id)
+            
+        docs_ref = docs_ref_query.stream()
         
         results = []
         for doc in docs_ref:
