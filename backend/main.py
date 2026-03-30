@@ -311,20 +311,24 @@ async def upload_automation(
         return {"status": "error", "message": str(e)}
 
 @app.post("/clear-queue")
-async def clear_queue(team_id: str = "General"):
-    """Clear all records for a specific team from storage"""
+async def clear_queue(team_id: Optional[str] = None, user_id: Optional[str] = None):
+    """
+    Carefully scoped clearing:
+    - If user_id is provided, only clear that user's data.
+    - If only team_id is provided, clear all team data (use with caution).
+    """
     try:
-        docs = db.collection("extractions").where("team_id", "==", team_id).stream()
+        query = db.collection("extractions")
+        if user_id:
+            docs = query.where("user_id", "==", user_id).stream()
+        elif team_id:
+            docs = query.where("team_id", "==", team_id.lower()).stream()
+        else:
+            return {"status": "error", "message": "No scope (team_id or user_id) provided"}
+
         deleted_count = 0
         for doc in docs:
             data = doc.to_dict()
-            # Delete from Storage
-            storage_path = data.get("storage_path")
-            if storage_path:
-                try:
-                    bucket.blob(storage_path).delete()
-                except:
-                    pass
             # Delete record
             db.collection("extractions").document(doc.id).delete()
             deleted_count += 1
