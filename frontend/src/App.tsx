@@ -238,12 +238,24 @@ export default function App() {
         };
       });
       
-      // Local filtering and sorting (Reliable & Zero-Index needed)
+      // Pure JS filtering for Role-Based isolation (Robust & Zero-Index)
       let filtered = allResults;
-      if (userRole === "user") {
+      
+      if (userRole === "admin") {
+        if (teamFilter !== 'Global') {
+          filtered = allResults.filter(r => r.team_id?.toLowerCase() === teamFilter.toLowerCase());
+        }
+      } else if (userRole === "leader") {
+        if (userFilter) {
+          // Drill Down: Selected User + Team Automation
+          filtered = allResults.filter(r => r.user_id === userFilter || r.user_id === 'automation');
+        } else {
+          // Personal: Leader's Own + Team Automation (No teammate receipts)
+          filtered = allResults.filter(r => r.user_id === authUser.uid || r.user_id === 'automation');
+        }
+      } else if (userRole === "user") {
+        // Regular User: Own + Team Automation
         filtered = allResults.filter(r => r.user_id === authUser.uid || r.user_id === 'automation');
-      } else if (userRole === "leader" && userFilter) {
-        filtered = allResults.filter(r => r.user_id === userFilter || r.user_id === 'automation');
       }
 
       const sorted = filtered.sort((a, b) => (b.upload_time || 0) - (a.upload_time || 0));
@@ -652,6 +664,12 @@ export default function App() {
                       <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4">
                         <Eye size={40} />
                         <p className="text-sm font-bold">Select a record</p>
+                      </div>
+                    ) : (selectedResult.status === 'QUEUED' || selectedResult.status === 'PROCESSING') ? (
+                      <div className="h-full flex flex-col items-center justify-center py-20 transition-all animate-in fade-in duration-500">
+                        <div className="w-12 h-12 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
+                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Extracting Data...</p>
+                        <p className="text-xs text-slate-400 mt-1">Gemini is analyzing your receipt</p>
                       </div>
                     ) : (
                       <div className="space-y-6">

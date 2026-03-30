@@ -42,14 +42,22 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
     if (userRole === 'admin') {
       q = query(baseCol, orderBy('created_at', 'desc'));
     } else {
-      // Leaders only see their own team (case-insensitive approach)
-      const normalizedTeam = (userTeam || 'General').toLowerCase();
-      q = query(baseCol, where('team_id', 'in', [normalizedTeam, userTeam || 'General']), orderBy('created_at', 'desc'));
+      // Simplest query for reliability — fetch all and filter in JS
+      q = query(baseCol);
     }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const usersData = snapshot.docs.map(doc => ({ ...doc.data(), uid: doc.id } as UserData));
-      setUsers(usersData);
+      const allUsers = snapshot.docs.map(doc => ({ ...doc.data(), uid: doc.id } as UserData));
+      
+      if (userRole === 'admin') {
+        setUsers(allUsers);
+      } else {
+        const normalizedTeam = (userTeam || 'General').toLowerCase();
+        const teamMembers = allUsers.filter(u => 
+          (u.team_id?.toLowerCase() === normalizedTeam)
+        ).sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+        setUsers(teamMembers);
+      }
     });
     return () => unsubscribe();
   }, [userRole, userTeam]);
@@ -179,7 +187,7 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
               <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Member</th>
               <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Role & Scope</th>
               <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Status</th>
-              <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100 text-right">Dashboard</th>
+              <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100 text-right">Oversight</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -226,9 +234,9 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
                     <div className="flex items-center justify-end gap-2">
                        <button 
                         onClick={() => onViewDashboard(u.uid, u.email)}
-                        className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2 opacity-0 group-hover:opacity-100"
+                        className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2 border border-indigo-100"
                       >
-                        <LayoutDashboard size={14} /> View Dashboard
+                        <LayoutDashboard size={14} /> Open Dashboard
                       </button>
                       
                       {userRole === 'admin' && (
