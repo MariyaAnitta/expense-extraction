@@ -4,7 +4,7 @@ import {
   Download, Trash2, Search, 
   LayoutDashboard, ShieldCheck, 
   TrendingUp, Zap, FolderOpen,
-  Plus, Loader2, Eye, X, Users
+  Plus, Loader2, Eye, X, Users, Check
 } from 'lucide-react';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
