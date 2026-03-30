@@ -364,7 +364,8 @@ export default function App() {
       } else if (userRole === "leader") {
         params = { team_id: userData?.team_id || "General" };
       } else {
-        params = { user_id: authUser?.uid };
+        // General Users now export their whole TEAM data (matching their dashboard)
+        params = { team_id: userData?.team_id || "General" };
       }
 
       const response = await axios.get(`${API_URL}/export-excel`, { 
