@@ -570,16 +570,17 @@ export default function App() {
                     <div className="overflow-x-auto">
                       <table className="w-full text-left">
                         <thead>
-                          <tr className="bg-slate-50/50 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b">
-                            <th className="px-8 py-4">Document</th>
-                            <th className="px-8 py-4">Status</th>
-                            <th className="px-8 py-4">Confidence</th>
-                            <th className="px-8 py-4 text-right">Actions</th>
+                          <tr>
+                            <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Document</th>
+                            <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Status</th>
+                            <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Amount (BHD)</th>
+                            <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Confidence</th>
+                            <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100 text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {queue.length === 0 ? (
-                            <tr><td colSpan={4} className="py-20 text-center text-slate-400">No documents in queue.</td></tr>
+                            <tr><td colSpan={5} className="py-20 text-center text-slate-400">No documents in queue.</td></tr>
                           ) : (
                             queue.map((item) => (
                               <tr key={item.file_id} onClick={() => setSelectedResult(item)} className={cn("cursor-pointer hover:bg-slate-50", selectedResult?.file_id === item.file_id && "bg-indigo-50/30")}>
@@ -597,7 +598,7 @@ export default function App() {
                                 <td className="px-8 py-4">
                                   <div className="flex items-center gap-1.5 min-w-[150px]">
                                     <div className={cn(
-                                      "px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all",
+                                      "px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all text-nowrap",
                                       item.user_verified 
                                         ? "bg-emerald-50 text-emerald-600 border border-emerald-100/50" 
                                         : "bg-slate-50 text-slate-400 border border-slate-100"
@@ -607,7 +608,7 @@ export default function App() {
                                     </div>
                                     <div className="w-3 h-[1px] bg-slate-200" />
                                     <div className={cn(
-                                      "px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all",
+                                      "px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all text-nowrap",
                                       item.is_verified 
                                         ? "bg-indigo-50 text-indigo-600 border border-indigo-100/50 shadow-sm shadow-indigo-100/20" 
                                         : "bg-slate-50 text-slate-400 border border-slate-100"
@@ -615,6 +616,11 @@ export default function App() {
                                       <div className={cn("w-1 h-1 rounded-full", item.is_verified ? "bg-indigo-600 shadow-[0_0_4px_rgba(79,70,229,0.3)]" : "bg-slate-300")} />
                                       Leader
                                     </div>
+                                  </div>
+                                </td>
+                                <td className="px-8 py-4">
+                                  <div className="font-bold text-slate-700 text-sm">
+                                    {(item.data?.amount || item.data?.deposit_amount || '—')}
                                   </div>
                                 </td>
                                 <td className="px-8 py-4">
