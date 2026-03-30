@@ -392,7 +392,10 @@ export default function App() {
     if (!selectedResult || !selectedResult.data) return;
     try {
       if (selectedResult.file_id === "draft-manual") {
-        await axios.post(`${API_URL}/add-manual?user_id=${authUser?.uid}&team_id=${userData?.team_id || "General"}`, selectedResult.data);
+        // Explicitly set IDs to avoid null propagation
+        const uid = authUser?.uid || "unknown";
+        const tid = userData?.team_id || "General";
+        await axios.post(`${API_URL}/add-manual?user_id=${uid}&team_id=${tid}`, selectedResult.data);
         setSelectedResult(null);
       } else {
         await axios.post(`${API_URL}/update-extraction/${selectedResult.file_id}?role=${userRole}`, selectedResult.data);
