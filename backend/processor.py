@@ -87,7 +87,7 @@ class ReceiptProcessor:
         Rules:
         1. If it's a purchase/expense, put the value in 'amount'.
         2. If it's a Top-Up, Deposit, or Credit, put the value in 'deposit_amount'.
-        3. For 'date', use DD/MM/YYYY format.
+        3. For 'date', use YYYY-MM-DD format (CRITICAL for web compatibility).
         4. Be descriptive for 'description'.
         
         *** SPECIAL RULE FOR PETTY CASH ***
@@ -102,7 +102,7 @@ class ReceiptProcessor:
         
         JSON Structure:
         {{
-            "date": "DD/MM/YYYY",
+            "date": "YYYY-MM-DD",
             "description": "Short summary of what was paid for",
             "amount": float or null,
             "deposit_amount": float or null,

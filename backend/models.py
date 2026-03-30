@@ -3,7 +3,7 @@ from typing import Optional, List
 from datetime import datetime
 
 class ReceiptData(BaseModel):
-    date: Optional[str] = Field(None, description="Date of the transaction (e.g., DD/MM/YYYY)")
+    date: Optional[str] = Field(None, description="Date of the transaction (YYYY-MM-DD)")
     description: Optional[str] = Field(None, description="Brief description of the expense")
     amount: Optional[float] = Field(None, description="Expense amount (debit)")
     deposit_amount: Optional[float] = Field(None, description="Deposit amount (credit)")
