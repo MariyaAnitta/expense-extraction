@@ -1,19 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Upload, FileText, 
-  Download, Trash2, Search, Filter, 
-  ChevronRight, ChevronDown, LayoutDashboard, ShieldCheck, 
+  Download, Trash2, Search, 
+  LayoutDashboard, ShieldCheck, 
   TrendingUp, Zap, FolderOpen,
-  Plus, Layers, Loader2, Eye, Check
+  Plus, Loader2, Eye, X, Users
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { 
   collection, onSnapshot, query, doc, getDoc, where
 } from 'firebase/firestore';
 import Login from './components/Login';
-import AdminUserManagement from './components/AdminUserManagement';
+import TeamManagement from './components/TeamManagement';
 import axios from 'axios';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -96,11 +95,19 @@ export default function App() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [userData, setUserData] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [currentView, setCurrentView] = useState<'board' | 'admin'>('board');
+  const [currentView, setCurrentView] = useState<'board' | 'admin' | 'team'>('board');
+  
+  const handleViewUserDashboard = (uid: string, email: string) => {
+    setUserFilter(uid);
+    setMemberEmail(email);
+    setCurrentView('board');
+  };
   
   const [queue, setQueue] = useState<ExtractionResult[]>([]);
   const [selectedResult, setSelectedResult] = useState<ExtractionResult | null>(null);
   const [teamFilter, setTeamFilter] = useState<string>('Global'); // For Admin filtering
+  const [userFilter, setUserFilter] = useState<string | null>(null); // For Leader/Admin drilling down
+  const [memberEmail, setMemberEmail] = useState<string | null>(null);
   const [availableTeams, setAvailableTeams] = useState<string[]>(['General']);
 
   // Fetch all unique teams for Admin dropdown
@@ -160,6 +167,7 @@ export default function App() {
     console.log("Backend URL:", API_URL);
     console.log("App Version:", APP_VERSION);
   }, []);
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -206,13 +214,16 @@ export default function App() {
     
     if (userRole === "admin") {
       if (teamFilter === 'Global') {
-        q = query(baseCol); // Global admin view
+        q = query(baseCol);
       } else {
-        q = query(baseCol, where("team_id", "==", teamFilter)); // Specific team view
+        q = query(baseCol, where("team_id", "==", teamFilter));
       }
     } else if (userRole === "leader") {
-      // Leaders see their team's receipts + their own
-      q = query(baseCol, where("team_id", "==", userData.team_id || "General"));
+      if (userFilter) {
+        q = query(baseCol, where("user_id", "==", userFilter));
+      } else {
+        q = query(baseCol, where("team_id", "==", userData.team_id || "General"));
+      }
     } else {
       q = query(baseCol, where("user_id", "==", authUser.uid));
     }
@@ -235,28 +246,22 @@ export default function App() {
         };
       });
 
-      // Sort client-side to avoid Firebase composite index errors when mixing where() and orderBy()
       realResults.sort((a, b) => b.upload_time - a.upload_time);
 
       setQueue(prevQueue => {
-        // Keep optimistic items (temp-) that don't have a matching real item yet
         const optimisticItems = prevQueue.filter(item => 
           item.file_id.startsWith('temp-') && 
           !realResults.some(real => real.file_name === item.file_name || real.file_name === item.file_name?.split('/').pop())
         );
-        
         return [...realResults, ...optimisticItems];
       });
     });
     return () => unsubscribe();
-  }, [authUser, userRole, userData]);
+  }, [authUser, userRole, userData, teamFilter, userFilter]);
 
   const uploadFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     
-    console.log(`Queueing ${files.length} files...`);
-
-    // Optimistic Update: Add files to UI immediately
     const tempResults: ExtractionResult[] = Array.from(files).map(file => ({
       file_id: `temp-${Math.random()}`,
       file_name: (file as any).webkitRelativePath || file.name,
@@ -264,7 +269,6 @@ export default function App() {
       data: null
     }));
     
-    // Merge optimistic items with existing queue, avoiding duplicates if snapshots already arrived
     setQueue(prev => {
       const filteredPrev = prev.filter(p => !tempResults.some(t => t.file_name === p.file_name));
       return [...tempResults, ...filteredPrev];
@@ -275,20 +279,15 @@ export default function App() {
       Array.from(files).forEach(file => {
         formData.append('files', file);
       });
-      // Attach identity for RBAC
       if (authUser?.uid) formData.append('user_id', authUser.uid);
       if (userData?.team_id) formData.append('team_id', userData.team_id);
       else formData.append('team_id', 'General');
       
-      const response = await axios.post(`${API_URL}/upload-batch`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+      await axios.post(`${API_URL}/upload-batch`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
-      console.log("Upload response:", response.data);
     } catch (error) {
       console.error("Batch upload failed", error);
-      // Remove temp files on failure
       setQueue(prev => prev.filter(item => !item.file_id.startsWith('temp-')));
     }
   };
@@ -316,12 +315,9 @@ export default function App() {
 
   const startProcessing = async () => {
     if (queue.filter(r => r.status === 'QUEUED' || r.status === 'FAILED').length === 0) return;
-    
     setIsProcessing(true);
-    console.log("Starting batch processing...");
     try {
-      const response = await axios.post(`${API_URL}/process-batch`);
-      console.log("Processing triggered:", response.data);
+      await axios.post(`${API_URL}/process-batch`);
     } catch (error) {
       console.error("Processing failed", error);
     } finally {
@@ -330,7 +326,6 @@ export default function App() {
   };
 
   const addManualEntry = () => {
-    // Select immediately so the panel opens on the right side
     setSelectedResult({
       file_id: "draft-manual",
       file_name: "Manual Entry",
@@ -353,10 +348,16 @@ export default function App() {
   };
 
   const exportToExcel = async () => {
+    if (userRole === 'user') {
+      const unverified = queue.some(item => !item.is_verified);
+      if (unverified) {
+        alert("Verification Required: Your Team Leader must confirm your receipts before you can export the Excel log.");
+        return;
+      }
+    }
+
     try {
-      // Determine what filters to send to the backend
       let params = {};
-      
       if (userRole === "admin") {
         if (teamFilter !== 'Global') params = { team_id: teamFilter };
       } else if (userRole === "leader") {
@@ -388,16 +389,12 @@ export default function App() {
 
   const handleConfirm = async () => {
     if (!selectedResult || !selectedResult.data) return;
-    
     try {
       if (selectedResult.file_id === "draft-manual") {
         await axios.post(`${API_URL}/add-manual`, selectedResult.data);
-        console.log("Manual entry added to database");
-        setSelectedResult(null); // Clear panel to indicate success
+        setSelectedResult(null);
       } else {
         await axios.post(`${API_URL}/update-extraction/${selectedResult.file_id}?role=${userRole}`, selectedResult.data);
-        console.log("Extraction verified and updated.");
-        // The Firestore listener will automatically update the UI status to COMPLETED
       }
     } catch (error) {
       console.error("Failed to save extraction", error);
@@ -407,14 +404,9 @@ export default function App() {
 
   const handleDataChange = (key: keyof ReceiptData, value: string | number | null) => {
     if (!selectedResult || !selectedResult.data) return;
-    
     const updatedData = { ...selectedResult.data, [key]: value };
     setSelectedResult({ ...selectedResult, data: updatedData });
-    
-    // Also update local queue state to keep UI in sync
-    setQueue(prev => prev.map(item => 
-      item.file_id === selectedResult.file_id ? { ...item, data: updatedData } : item
-    ));
+    setQueue(prev => prev.map(item => item.file_id === selectedResult.file_id ? { ...item, data: updatedData } : item));
   };
 
   if (authLoading) {
@@ -432,7 +424,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F5F2EA] text-slate-900 font-sans selection:bg-indigo-100 flex overflow-hidden">
-      {/* --- Sidebar --- */}
+      {/* Sidebar */}
       <aside className="fixed left-0 top-0 bottom-0 w-20 bg-white border-r border-slate-200 hidden lg:flex flex-col items-center py-8 gap-10 z-50">
         <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-200 group cursor-pointer hover:rotate-6 transition-all duration-300">
           <Zap size={24} fill="currentColor" />
@@ -447,22 +439,20 @@ export default function App() {
               <SidebarItem icon={ShieldCheck} label="Admin" active={currentView === 'admin'} />
             </div>
           )}
+          {userRole === 'leader' && (
+            <div onClick={() => setCurrentView('team')}>
+              <SidebarItem icon={Users} label="Team" active={currentView === 'team'} />
+            </div>
+          )}
         </nav>
 
-        <div 
-          onClick={() => signOut(auth)}
-          title="Sign Out"
-          className="group relative w-10 h-10 rounded-full bg-slate-100 border-2 border-slate-200 shadow-sm overflow-hidden cursor-pointer hover:ring-2 ring-rose-500 hover:border-rose-500 transition-all flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-        >
-          <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${authUser.email}`} alt="Account" className="w-full h-full object-cover group-hover:opacity-0 absolute" />
-          <svg className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity absolute" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+        <div onClick={() => signOut(auth)} className="w-10 h-10 rounded-full bg-slate-100 border-2 border-slate-200 shadow-sm overflow-hidden cursor-pointer hover:ring-2 ring-rose-500 hover:border-rose-500 transition-all flex items-center justify-center text-slate-400">
+          <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${authUser.email}`} alt="Account" className="w-full h-full object-cover" />
         </div>
       </aside>
 
-      {/* --- Main Dashboard Area --- */}
+      {/* Main Area */}
       <div className="lg:pl-20 flex-1 flex flex-col min-h-screen">
-        
-        {/* Top Header */}
         <header className="h-20 bg-[#F5F2EA]/80 backdrop-blur-md border-b border-slate-200/60 flex items-center justify-between px-8 sticky top-0 z-40">
           <div className="flex flex-col">
             <h1 className="text-xl font-display font-bold text-slate-800 tracking-tight">Expense Intelligence</h1>
@@ -474,470 +464,201 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-6">
-            {/* Admin Team Filter */}
             {userRole === 'admin' && (
               <div className="flex items-center gap-3 bg-white/50 backdrop-blur-sm px-4 py-2 rounded-2xl border border-slate-200">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">View Team:</span>
-                <select 
-                  value={teamFilter} 
-                  onChange={(e) => setTeamFilter(e.target.value)}
-                  className="bg-transparent border-none text-sm font-bold text-indigo-600 outline-none cursor-pointer focus:ring-0"
-                >
+                <select value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)} className="bg-transparent border-none text-sm font-bold text-indigo-600 outline-none cursor-pointer">
                   <option value="Global">All Teams (Global)</option>
-                  {availableTeams.map(team => (
-                    <option key={team} value={team}>{team}</option>
-                  ))}
+                  {availableTeams.map(team => <option key={team} value={team}>{team}</option>)}
                 </select>
               </div>
             )}
+
+            {userFilter && (
+              <div className="flex items-center gap-3 bg-indigo-50/50 px-4 py-2 rounded-2xl border border-indigo-100">
+                <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Viewing Member:</span>
+                <span className="text-sm font-bold text-indigo-600">{memberEmail}</span>
+                <button onClick={() => { setUserFilter(null); setMemberEmail(null); }} className="p-1 hover:bg-indigo-100 rounded-full transition-colors text-indigo-400">
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+            
             <div className="relative group hidden md:block">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-indigo-500" size={16} />
-              <input 
-                type="text" 
-                placeholder="Search receipts..." 
-                className="w-64 bg-slate-100 border-none rounded-full py-2.5 pl-11 pr-4 text-sm font-semibold focus:ring-2 focus:ring-indigo-500/10 transition-all outline-none"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input type="text" placeholder="Search..." className="w-64 bg-slate-100 border-none rounded-full py-2.5 pl-11 pr-4 text-sm font-semibold outline-none" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
             
-            <button 
-              onClick={startProcessing}
-              disabled={isProcessing || queue.length === 0}
-              className="px-6 py-2.5 bg-indigo-600 text-white rounded-full font-bold text-sm hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-indigo-100 group capitalize"
-            >
-              {isProcessing ? <Loader2 className="animate-spin" size={18} /> : <Zap size={18} className="group-hover:scale-110 transition-transform" fill="currentColor" />}
+            <button onClick={startProcessing} disabled={isProcessing || queue.length === 0} className="px-6 py-2.5 bg-indigo-600 text-white rounded-full font-bold text-sm hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg shadow-indigo-100">
+              {isProcessing ? <Loader2 className="animate-spin" size={18} /> : <Zap size={18} fill="currentColor" />}
               {isProcessing ? 'Analyzing...' : 'Analyze All'}
             </button>
 
-            <button 
-              onClick={exportToExcel}
-              disabled={queue.filter(r => r.status === 'COMPLETED').length === 0}
-              className="px-8 py-3 bg-emerald-500 text-white rounded-full font-black tracking-wide text-sm hover:bg-emerald-600 hover:shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-emerald-500/20"
-            >
-              <Download size={18} className="animate-pulse" />
-              EXPORT TO EXCEL
+            <button onClick={exportToExcel} disabled={queue.filter(r => r.status === 'COMPLETED').length === 0} className="px-8 py-3 bg-emerald-500 text-white rounded-full font-black tracking-wide text-sm hover:bg-emerald-600 transition-all flex items-center gap-2">
+              <Download size={18} /> EXPORT TO EXCEL
             </button>
           </div>
         </header>
 
-        {/* Dashboard Content */}
         <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
-          {currentView === 'admin' && userRole === 'admin' ? (
-            <AdminUserManagement />
+          {currentView !== 'board' ? (
+            <TeamManagement userRole={userRole} userTeam={userData?.team_id} onViewDashboard={handleViewUserDashboard} />
           ) : (
             <>
-              {/* Stats Row */}
               <div className="grid grid-cols-3 gap-6">
-            <StatCard 
-              icon={TrendingUp} 
-              label="Total Expenses" 
-              value={totalAmount} 
-              subtext="BHD" 
-              trend="+12%" 
-              colorClass="text-rose-500" 
-            />
-            <StatCard 
-              icon={Plus} 
-              label="Total Deposits" 
-              value={totalDeposits} 
-              subtext="BHD" 
-              colorClass="text-emerald-500" 
-            />
-            <StatCard 
-              icon={ShieldCheck} 
-              label="Avg. Confidence" 
-              value={`${avgConfidence}%`} 
-              subtext="AI Score" 
-              colorClass="text-indigo-500" 
-            />
-          </div>
-
-          {/* Wide Dropzone Area */}
-          <div 
-            className={cn(
-              "bg-white rounded-[2.5rem] border-2 border-dashed p-10 transition-all duration-500 group relative overflow-hidden",
-              isDragging ? "border-indigo-500 bg-indigo-50/50 scale-[1.01]" : "border-slate-200 hover:border-indigo-400 hover:bg-slate-50/50 shadow-sm"
-            )}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            <div className="flex flex-col items-center text-center">
-              <div className={cn(
-                "w-16 h-16 rounded-3xl flex items-center justify-center mb-6 transition-all duration-500",
-                isDragging ? "bg-indigo-200 text-indigo-700 animate-bounce" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 group-hover:scale-110"
-              )}>
-                <Upload size={32} />
-              </div>
-              <h2 className="text-xl font-display font-bold text-slate-800 mb-2">Import Financial Documents</h2>
-              <p className="text-slate-400 text-sm font-medium max-w-sm mx-auto mb-8">
-                {isDragging ? "Drop your files here!" : "Drag and drop files here, or use the selection buttons below"}
-              </p>
-              
-              <div className="flex gap-4">
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  className="bg-slate-900 hover:bg-black text-white px-8 py-3 rounded-full flex items-center gap-3 font-bold text-sm shadow-xl shadow-slate-200 transition-all active:scale-95"
-                >
-                  <FileText size={18} /> Select Files
-                </button>
-                <button 
-                  onClick={(e) => { e.stopPropagation(); folderInputRef.current?.click(); }}
-                  className="bg-slate-900 hover:bg-black text-white px-8 py-3 rounded-full flex items-center gap-3 font-bold text-sm shadow-xl shadow-slate-200 transition-all active:scale-95"
-                >
-                  <FolderOpen size={18} className="text-indigo-400" /> Select Folder
-                </button>
-                <button 
-                  onClick={addManualEntry}
-                  className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-900 px-8 py-3 rounded-full flex items-center gap-3 font-bold text-sm shadow-xl shadow-slate-200 transition-all active:scale-95"
-                >
-                  <Plus size={18} className="text-indigo-600" /> Manual Entry
-                </button>
+                <StatCard icon={TrendingUp} label="Total Expenses" value={totalAmount} subtext="BHD" trend="+12%" colorClass="text-rose-500" />
+                <StatCard icon={Plus} label="Total Deposits" value={totalDeposits} subtext="BHD" colorClass="text-emerald-500" />
+                <StatCard icon={ShieldCheck} label="Avg. Confidence" value={`${avgConfidence}%`} subtext="AI Score" colorClass="text-indigo-500" />
               </div>
 
-              <input 
-                ref={fileInputRef} 
-                type="file" 
-                multiple 
-                accept=".png,.jpg,.jpeg,.pdf,.msg"
-                className="hidden" 
-                onChange={(e) => uploadFiles(e.target.files)} 
-              />
-              <input 
-                ref={folderInputRef} 
-                type="file" 
-                {...{ webkitdirectory: "", directory: "" } as any} 
-                className="hidden" 
-                onChange={(e) => uploadFiles(e.target.files)} 
-              />
-            </div>
-          </div>
-
-          {/* Main Workspace (Queue & Verification) */}
-          <div className="grid grid-cols-12 gap-8 items-start">
-            {/* Left Column: Queue */}
-            <div className="col-span-8 space-y-8">
-
-              {/* Document Queue Table */}
-              <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden min-h-[500px]">
-                <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <h3 className="text-lg font-display font-bold text-slate-800 tracking-tight">Document Queue <span className="text-[10px] text-slate-300 font-mono ml-2 uppercase opacity-50">{APP_VERSION}</span></h3>
-                    <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">{queue.length} TOTAL</span>
+              <div 
+                className={cn(
+                  "bg-white rounded-[2.5rem] border-2 border-dashed p-10 transition-all duration-500 group",
+                  isDragging ? "border-indigo-500 bg-indigo-50/50" : "border-slate-200 hover:border-indigo-400 hover:bg-slate-50/50"
+                )}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <div className="flex flex-col items-center text-center">
+                  <div className={cn("w-16 h-16 rounded-3xl flex items-center justify-center mb-6", isDragging ? "bg-indigo-200 text-indigo-700" : "bg-indigo-50 text-indigo-600")}>
+                    <Upload size={32} />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button className="p-2 text-slate-400 hover:bg-slate-50 rounded-lg transition-colors">
-                      <Filter size={18} />
+                  <h2 className="text-xl font-display font-bold text-slate-800 mb-2">Import Documents</h2>
+                  <p className="text-slate-400 text-sm font-medium mb-8">Drag and drop or select files below</p>
+                  <div className="flex gap-4">
+                    <button onClick={() => fileInputRef.current?.click()} className="bg-slate-900 text-white px-8 py-3 rounded-full flex items-center gap-3 font-bold text-sm">
+                      <FileText size={18} /> Select Files
                     </button>
-                    <button 
-                      onClick={clearQueue}
-                      className="text-rose-500 font-black text-[10px] uppercase tracking-[0.15em] hover:text-rose-600 transition-colors"
-                    >
-                      CLEAR ALL
+                    <button onClick={(e) => { e.stopPropagation(); folderInputRef.current?.click(); }} className="bg-slate-900 text-white px-8 py-3 rounded-full flex items-center gap-3 font-bold text-sm">
+                      <FolderOpen size={18} /> Folder
+                    </button>
+                    <button onClick={addManualEntry} className="bg-white border border-slate-200 text-slate-900 px-8 py-3 rounded-full flex items-center gap-3 font-bold text-sm">
+                      <Plus size={18} /> Manual
                     </button>
                   </div>
+                  <input ref={fileInputRef} type="file" multiple accept=".png,.jpg,.jpeg,.pdf,.msg" className="hidden" onChange={(e) => uploadFiles(e.target.files)} />
+                  <input ref={folderInputRef} type="file" {...{ webkitdirectory: "", directory: "" } as any} className="hidden" onChange={(e) => uploadFiles(e.target.files)} />
                 </div>
+              </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50/50">
-                        <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100 whitespace-nowrap">Document</th>
-                        <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Status</th>
-                        <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100 w-32">Confidence</th>
-                        <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100 text-right w-20">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {queue.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="py-32 text-center">
-                            <div className="flex flex-col items-center gap-4 opacity-20">
-                              <Layers size={64} className="text-slate-400" />
-                              <div className="space-y-1">
-                                <p className="font-display font-bold text-lg text-slate-600">No Documents Found</p>
-                                <p className="text-sm text-slate-400">Upload receipts to begin AI extraction</p>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      ) : (
-                        <AnimatePresence mode="popLayout">
-                          {queue.map((item) => (
-                            <motion.tr 
-                              layout
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, scale: 0.95 }}
-                              key={item.file_id} 
-                              onClick={() => setSelectedResult(item)}
-                              className={cn(
-                                "group cursor-pointer transition-all duration-200",
-                                selectedResult?.file_id === item.file_id ? "bg-indigo-50/30" : "hover:bg-slate-50/50"
-                              )}
-                            >
-                              <td className="px-8 py-5">
-                                <div className="flex items-center gap-4">
-                                  <div className={cn(
-                                    "w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300",
-                                    selectedResult?.file_id === item.file_id ? "bg-indigo-100 text-indigo-600" : "bg-slate-100 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-500"
-                                  )}>
-                                    <FileText size={20} />
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <p className="font-bold text-slate-800 text-sm max-w-[200px] truncate">{item.file_name}</p>
-                                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-tight">
-                                      {item.file_name.toUpperCase().endsWith('.PDF') ? 'APPLICATION/PDF' : 'IMAGE/JPEG'}
-                                    </p>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-8 py-5">
-                                <div className="flex items-center gap-2">
-                                  {item.status === 'PROCESSING' && <Loader2 size={14} className="animate-spin text-indigo-600" />}
-                                  {item.status === 'COMPLETED' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
-                                  {item.status === 'FAILED' && <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />}
-                                  {item.status === 'QUEUED' && <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />}
-                                  <span className={cn(
-                                    "text-[10px] font-black uppercase tracking-widest transition-colors",
-                                    item.status === 'COMPLETED' ? "text-emerald-600" :
-                                    item.status === 'PROCESSING' ? "text-indigo-600" :
-                                    item.status === 'FAILED' ? "text-rose-600" :
-                                    "text-slate-400"
-                                  )}>
-                                    {item.status === 'QUEUED' ? 'PENDING' : item.status}
-                                  </span>
-                                  {item.is_verified && <ShieldCheck size={14} className="text-emerald-500 ml-2" />}
-                                </div>
-                              </td>
-                              <td className="px-8 py-5">
-                                {item.data?.confidence ? (
+              <div className="grid grid-cols-12 gap-8 items-start">
+                <div className="col-span-8">
+                  <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden min-h-[500px]">
+                    <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
+                      <h3 className="text-lg font-bold text-slate-800">Document Queue</h3>
+                      <button onClick={clearQueue} className="text-rose-500 font-black text-[10px] uppercase tracking-widest">CLEAR ALL</button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="bg-slate-50/50 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b">
+                            <th className="px-8 py-4">Document</th>
+                            <th className="px-8 py-4">Status</th>
+                            <th className="px-8 py-4">Confidence</th>
+                            <th className="px-8 py-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {queue.length === 0 ? (
+                            <tr><td colSpan={4} className="py-20 text-center text-slate-400">No documents in queue.</td></tr>
+                          ) : (
+                            queue.map((item) => (
+                              <tr key={item.file_id} onClick={() => setSelectedResult(item)} className={cn("cursor-pointer hover:bg-slate-50", selectedResult?.file_id === item.file_id && "bg-indigo-50/30")}>
+                                <td className="px-8 py-4">
                                   <div className="flex items-center gap-3">
-                                    <div className="flex-1 h-1.5 w-24 bg-slate-100 rounded-full overflow-hidden">
-                                      <motion.div 
-                                        initial={{ width: 0 }}
-                                        animate={{ width: `${item.data.confidence}%` }}
-                                        className={cn(
-                                          "h-full rounded-full transition-colors duration-500",
-                                          item.data.confidence > 80 ? "bg-emerald-500" : "bg-indigo-500"
-                                        )}
-                                      />
-                                    </div>
-                                    <span className="text-[10px] font-mono font-bold text-slate-600">{item.data.confidence}%</span>
+                                    <FileText size={18} className="text-slate-400" />
+                                    <span className="font-bold text-slate-800 text-sm truncate max-w-[150px]">{item.file_name}</span>
                                   </div>
-                                ) : <span className="text-slate-300 text-xs ml-2">—</span>}
-                              </td>
-                              <td className="px-8 py-5 text-right whitespace-nowrap">
-                                <div className="flex items-center justify-end gap-1">
-                                  <button onClick={(e) => deleteExtraction(e, item.file_id)} className="p-2 hover:bg-rose-50 text-rose-500 rounded-lg transition-colors">
+                                </td>
+                                <td className="px-8 py-4">
+                                  <div className="flex items-center gap-2">
+                                    <span className={cn("text-[10px] font-black uppercase tracking-widest", item.status === 'COMPLETED' ? "text-emerald-600" : "text-indigo-600")}>
+                                      {item.status}
+                                    </span>
+                                    {item.is_verified && <ShieldCheck size={14} className="text-emerald-500" />}
+                                  </div>
+                                </td>
+                                <td className="px-8 py-4">
+                                  {item.data?.confidence ? (
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                        <div className="h-full bg-indigo-500" style={{ width: `${item.data.confidence}%` }} />
+                                      </div>
+                                      <span className="text-[10px] font-bold text-slate-600">{item.data.confidence}%</span>
+                                    </div>
+                                  ) : "—"}
+                                </td>
+                                <td className="px-8 py-4 text-right">
+                                  <button onClick={(e) => deleteExtraction(e, item.file_id)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg">
                                     <Trash2 size={16} />
                                   </button>
-                                  <button className="p-2 hover:bg-slate-100 text-slate-400 rounded-lg transition-colors">
-                                    <Eye size={16} />
-                                  </button>
-                                </div>
-                              </td>
-                            </motion.tr>
-                          ))}
-                        </AnimatePresence>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column: Verification Panel */}
-            <div className="col-span-4 lg:sticky lg:top-28 bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden min-h-[600px] flex flex-col transition-all duration-500">
-              <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                <div>
-                  <h3 className="text-lg font-display font-bold text-slate-800 tracking-tight">Verification</h3>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Manual data review</p>
-                </div>
-                {selectedResult && (
-                  <div className="flex items-center gap-2 px-3 py-1 bg-white border border-slate-200 rounded-full shadow-sm">
-                    <div className={cn(
-                      "w-2 h-2 rounded-full",
-                      selectedResult.status === 'COMPLETED' ? "bg-emerald-500" : 
-                      selectedResult.status === 'FAILED' ? "bg-rose-500" : "bg-amber-500"
-                    )} />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">
-                      {selectedResult.status}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {selectedResult?.status === 'FAILED' && (
-                <div className="mx-8 mt-6 p-4 bg-rose-50 border border-rose-100 rounded-2xl">
-                  <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-1">Extraction Error</p>
-                  <p className="text-xs font-bold text-rose-700 leading-relaxed">
-                    {selectedResult.error || "The AI analysis failed for this document. Please try again or enter details manually."}
-                  </p>
-                </div>
-              )}
-
-              <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-                {!selectedResult ? (
-                  <div className="flex flex-col items-center justify-center h-full text-center space-y-6 py-24">
-                    <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center mx-auto text-slate-200">
-                      <Eye size={32} />
-                    </div>
-                    <div className="space-y-2">
-                      <p className="font-display font-bold text-lg text-slate-700">Awaiting Selection</p>
-                      <p className="text-sm text-slate-400 max-w-[200px] mx-auto leading-relaxed">Select a document from the queue to verify details</p>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
-                ) : (
-                    <div className="space-y-6">
+                </div>
 
-
-                      {/* Extraction Fields */}
+                <div className="col-span-4 bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[600px]">
+                  <div className="px-8 py-6 border-b border-slate-100 bg-slate-50/50">
+                    <h3 className="text-lg font-bold text-slate-800">Verification</h3>
+                  </div>
+                  <div className="flex-1 p-8 overflow-y-auto custom-scrollbar">
+                    {!selectedResult ? (
+                      <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4">
+                        <Eye size={40} />
+                        <p className="text-sm font-bold">Select a record</p>
+                      </div>
+                    ) : (
                       <div className="space-y-6">
-                        
-                        <div className="grid grid-cols-[1.4fr,1fr] gap-4">
-                          {/* Transaction Date */}
-                          <div className="space-y-2">
-                            <label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.1em] ml-1 block">TRANSACTION DATE</label>
-                            <div className="relative group">
-                              <input 
-                                type="date" 
-                                className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 pr-2 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
-                                value={(() => {
-                                  const d = selectedResult?.data?.date;
-                                  if (!d) return '';
-                                  if (d.includes('/')) {
-                                    const parts = d.split('/');
-                                    return `${parts[2]}-${parts[1]}-${parts[0]}`;
-                                  }
-                                  if (d.split('-').length === 3 && d.split('-')[0].length === 2) {
-                                    const parts = d.split('-');
-                                    return `${parts[2]}-${parts[1]}-${parts[0]}`;
-                                  }
-                                  return d;
-                                })()}
-                                onChange={(e) => handleDataChange('date', e.target.value)}
-                              />
-                            </div>
-                          </div>
-
-                          {/* Entry Type */}
-                          <div className="space-y-2">
-                            <label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.1em] ml-1 block">ENTRY TYPE</label>
-                            <div className="relative">
-                              <select
-                                value={selectedResult?.data?.category || 'Expense'}
-                                onChange={(e) => {
-                                  const newCat = e.target.value;
-                                  const isDep = newCat === 'Deposit';
-                                  const currentAmount = isDep ? (selectedResult?.data?.amount || '') : (selectedResult?.data?.deposit_amount || '');
-                                  
-                                  handleDataChange('category', newCat);
-                                  if (isDep) {
-                                    handleDataChange('deposit_amount', currentAmount ? Number(currentAmount) : null);
-                                    handleDataChange('amount', null);
-                                  } else {
-                                    handleDataChange('amount', currentAmount ? Number(currentAmount) : null);
-                                    handleDataChange('deposit_amount', null);
-                                  }
-                                }}
-                                className="w-full appearance-none bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
-                              >
-                                <option value="Expense">Expense</option>
-                                <option value="Deposit">Deposit</option>
+                        {[
+                          { label: 'Date', key: 'date', type: 'date' },
+                          { label: 'Type', key: 'category', type: 'select', options: ['Expense', 'Deposit'] },
+                          { label: 'Description', key: 'description', type: 'textarea' },
+                          { label: 'Amount', key: 'amount', type: 'number' },
+                          { label: 'Remarks', key: 'remarks', type: 'text' }
+                        ].map(field => (
+                          <div key={field.key} className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 uppercase">{field.label}</label>
+                            {field.type === 'textarea' ? (
+                              <textarea className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100" rows={2} value={selectedResult.data?.[field.key as keyof ReceiptData] || ''} onChange={e => handleDataChange(field.key as keyof ReceiptData, e.target.value)} />
+                            ) : field.type === 'select' ? (
+                              <select className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100" value={selectedResult.data?.[field.key as keyof ReceiptData] || 'Expense'} onChange={e => handleDataChange(field.key as keyof ReceiptData, e.target.value)}>
+                                {field.options?.map(o => <option key={o} value={o}>{o}</option>)}
                               </select>
-                              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                <ChevronDown size={16} />
-                              </div>
-                            </div>
+                            ) : (
+                              <input type={field.type} className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100" value={selectedResult.data?.[field.key as keyof ReceiptData] || ''} onChange={e => handleDataChange(field.key as keyof ReceiptData, e.target.value)} />
+                            )}
                           </div>
-                        </div>
-
-                        {/* Description */}
-                        <div className="space-y-2">
-                          <label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.1em] ml-1 block">DESCRIPTION</label>
-                          <textarea 
-                            rows={2}
-                            className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-6 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none resize-none custom-scrollbar"
-                            value={selectedResult?.data?.description || ''}
-                            onChange={(e) => handleDataChange('description', e.target.value)}
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-x-6 gap-y-6">
-                          {/* Amount */}
-                          <div className="space-y-2">
-                            <label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.1em] ml-1 block">AMOUNT (BHD)</label>
-                            <div className="relative group flex items-center">
-                              <span className="absolute left-6 text-xs font-black text-slate-400">BHD</span>
-                              <input 
-                                type="text" 
-                                inputMode="decimal"
-                                className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 pl-16 pr-6 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
-                                value={selectedResult?.data?.category === 'Deposit' ? (selectedResult?.data?.deposit_amount ?? '') : (selectedResult?.data?.amount ?? '')}
-                                onChange={(e) => {
-                                  const val = e.target.value === '' ? null : e.target.value;
-                                  if (!selectedResult?.data) return;
-                                  const isDep = selectedResult.data.category === 'Deposit';
-                                  const updatedData = {
-                                    ...selectedResult.data,
-                                    deposit_amount: isDep ? val : null,
-                                    amount: isDep ? null : val
-                                  };
-                                  setSelectedResult({ ...selectedResult, data: updatedData });
-                                  setQueue(prev => prev.map(item => item.file_id === selectedResult.file_id ? { ...item, data: updatedData } : item));
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Internal Remarks */}
-                        <div className="space-y-2">
-                          <label className="text-[10px] text-slate-400 font-black uppercase tracking-[0.1em] ml-1 block">INTERNAL REMARKS</label>
-                          <input 
-                            type="text" 
-                            className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-6 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
-                            value={selectedResult?.data?.remarks || ''}
-                            onChange={(e) => handleDataChange('remarks', e.target.value)}
-                          />
+                        ))}
+                        <div className="pt-4 flex flex-col gap-3">
+                          {selectedResult.image_url && (
+                            <a href={selectedResult.image_url} target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-slate-100 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
+                              <Eye size={14} /> VIEW ORIGINAL
+                            </a>
+                          )}
+                          <button 
+                            onClick={handleConfirm}
+                            disabled={(userRole === 'admin' || userRole === 'leader') ? selectedResult?.is_verified : selectedResult?.user_verified}
+                            className={cn(
+                              "w-full py-4 rounded-xl font-black text-xs shadow-lg transition-all",
+                              ((userRole === 'admin' || userRole === 'leader') ? selectedResult?.is_verified : selectedResult?.user_verified)
+                                ? "bg-emerald-500 text-white" : "bg-slate-900 text-white hover:bg-black"
+                            )}
+                          >
+                            {((userRole === 'admin' || userRole === 'leader') ? selectedResult?.is_verified : selectedResult?.user_verified) ? 'VERIFIED' : 'CONFIRM DETAILS'}
+                          </button>
                         </div>
                       </div>
-                        <div className="mt-8 flex gap-3">
-                           {selectedResult?.image_url && (
-                             <a 
-                               href={selectedResult.image_url} 
-                               target="_blank" 
-                               rel="noopener noreferrer"
-                               className="flex-[0.4] bg-slate-100 hover:bg-slate-200 text-slate-600 py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-                             >
-                                <Eye size={18} /> View
-                             </a>
-                           )}
-                           <button 
-                             onClick={handleConfirm}
-                             disabled={userRole === 'admin' ? selectedResult?.admin_verified : userRole === 'leader' ? selectedResult?.leader_verified : selectedResult?.user_verified}
-                             className={`flex-1 py-4 rounded-2xl font-black text-sm shadow-xl flex items-center justify-center gap-2 group transition-all ${
-                               (userRole === 'admin' ? selectedResult?.admin_verified : userRole === 'leader' ? selectedResult?.leader_verified : selectedResult?.user_verified)
-                                 ? "bg-emerald-500 text-white cursor-not-allowed shadow-emerald-100" 
-                                 : "bg-slate-900 hover:bg-black text-white shadow-slate-200 active:scale-[0.98]"
-                             }`}
-                           >
-                             {(userRole === 'admin' ? selectedResult?.admin_verified : userRole === 'leader' ? selectedResult?.leader_verified : selectedResult?.user_verified) ? (
-                               <>{userRole === 'admin' ? 'Audited' : userRole === 'leader' ? 'Leader Verified' : 'Confirmed'} <Check size={18} /></>
-                             ) : (
-                               <>{userRole === 'admin' ? 'Final Audit' : userRole === 'leader' ? 'Verify Team Expense' : 'Confirm Details'} <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" /></>
-                             )}
-                           </button>
-                        </div>
-                    </div>
-                )}
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-
-          </div>
-          </>
+            </>
           )}
         </div>
       </div>

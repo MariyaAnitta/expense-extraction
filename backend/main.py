@@ -361,20 +361,21 @@ async def update_extraction(doc_id: str, data: ReceiptData, role: str = "user"):
     try:
         update_dict = {
             "data": data.model_dump(),
-            "status": "COMPLETED",
-            "is_verified": True # legacy fallback flag
+            "status": "COMPLETED"
         }
         
-        # Multi-stage RBAC toggles
-        if role == "admin":
-            update_dict["admin_verified"] = True
-            update_dict["leader_verified"] = True
-            update_dict["user_verified"] = True
-        elif role == "leader":
+        # Two-step Verification Logic:
+        # is_verified is the GLOBAL gate for Excel exports.
+        # Only leaders and admins can set it to True.
+        
+        if role == "admin" or role == "leader":
+            update_dict["is_verified"] = True
             update_dict["leader_verified"] = True
             update_dict["user_verified"] = True
         else:
+            # General User confirm-only
             update_dict["user_verified"] = True
+            update_dict["is_verified"] = False # explicitly keep it false until Leader checks
             
         db.collection("extractions").document(doc_id).update(update_dict)
         print(f"Extraction {doc_id} manually verified and completed.")
