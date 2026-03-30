@@ -676,12 +676,12 @@ export default function App() {
                                   className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100" 
                                   value={
                                     field.key === 'amount' 
-                                      ? (selectedResult.data.amount || selectedResult.data.deposit_amount || '') 
+                                      ? (selectedResult.data?.amount || selectedResult.data?.deposit_amount || '') 
                                       : (selectedResult.data?.[field.key as keyof ReceiptData] || '')
                                   } 
                                   onChange={e => {
                                     // Map "Amount" field to the correct internal key based on category
-                                    const actualKey = (field.key === 'amount' && selectedResult.data.category === 'Deposit') 
+                                    const actualKey = (field.key === 'amount' && selectedResult.data?.category === 'Deposit') 
                                       ? 'deposit_amount' 
                                       : (field.key as keyof ReceiptData);
                                     handleDataChange(actualKey, e.target.value);
