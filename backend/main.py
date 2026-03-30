@@ -494,7 +494,7 @@ async def create_user(req: CreateUserRequest):
             "uid": user_record.uid,
             "email": req.email,
             "role": req.role,
-            "team_id": req.team_id or "General",
+            "team_id": (req.team_id or "general").lower(),
             "status": "active",
             "created_at": time.time()
         })
