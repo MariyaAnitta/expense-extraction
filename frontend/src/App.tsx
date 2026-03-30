@@ -4,7 +4,7 @@ import {
   Download, Trash2, Search, 
   LayoutDashboard, ShieldCheck, 
   TrendingUp, Zap, FolderOpen,
-  Plus, Loader2, Eye, X, Users, Check
+  Plus, Loader2, Eye, X, Users
 } from 'lucide-react';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
@@ -577,24 +577,25 @@ export default function App() {
                                   </div>
                                 </td>
                                 <td className="px-8 py-4">
-                                  <div className="flex flex-col gap-1.5 min-w-[120px]">
-                                    <div className="flex items-center gap-2">
-                                      <div className={cn("w-1.5 h-1.5 rounded-full", item.user_verified ? "bg-emerald-500" : "bg-slate-200")} />
-                                      <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">Employee</span>
-                                      {item.user_verified ? (
-                                        <Check size={10} className="text-emerald-500" />
-                                      ) : (
-                                          <span className="h-2.5" /> 
-                                      )}
+                                  <div className="flex items-center gap-1.5 min-w-[150px]">
+                                    <div className={cn(
+                                      "px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all",
+                                      item.user_verified 
+                                        ? "bg-emerald-50 text-emerald-600 border border-emerald-100/50" 
+                                        : "bg-slate-50 text-slate-400 border border-slate-100"
+                                    )}>
+                                      <div className={cn("w-1 h-1 rounded-full", item.user_verified ? "bg-emerald-500" : "bg-slate-300")} />
+                                      User
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                      <div className={cn("w-1.5 h-1.5 rounded-full", item.is_verified ? "bg-indigo-600 shadow-[0_0_8px_rgba(79,70,229,0.3)]" : "bg-slate-200")} />
-                                      <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">Leader</span>
-                                      {item.is_verified ? (
-                                        <ShieldCheck size={10} className="text-indigo-600" />
-                                      ) : (
-                                        <span className="h-2.5" />
-                                      )}
+                                    <div className="w-3 h-[1px] bg-slate-200" />
+                                    <div className={cn(
+                                      "px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all",
+                                      item.is_verified 
+                                        ? "bg-indigo-50 text-indigo-600 border border-indigo-100/50 shadow-sm shadow-indigo-100/20" 
+                                        : "bg-slate-50 text-slate-400 border border-slate-100"
+                                    )}>
+                                      <div className={cn("w-1 h-1 rounded-full", item.is_verified ? "bg-indigo-600 shadow-[0_0_4px_rgba(79,70,229,0.3)]" : "bg-slate-300")} />
+                                      Leader
                                     </div>
                                   </div>
                                 </td>
