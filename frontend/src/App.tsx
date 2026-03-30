@@ -407,11 +407,24 @@ export default function App() {
     }
   };
 
-  const handleDataChange = (key: keyof ReceiptData, value: string | number | null) => {
+  const handleDataChange = (key: keyof ReceiptData, value: any) => {
     if (!selectedResult || !selectedResult.data) return;
-    const updatedData = { ...selectedResult.data, [key]: value };
-    setSelectedResult({ ...selectedResult, data: updatedData });
-    setQueue(prev => prev.map(item => item.file_id === selectedResult.file_id ? { ...item, data: updatedData } : item));
+    
+    let newData = { ...selectedResult.data, [key]: value };
+    
+    // Automatically swap amount and deposit_amount based on category
+    if (key === 'category') {
+      const currentAmount = selectedResult.data.amount || selectedResult.data.deposit_amount || '';
+      if (value === 'Deposit') {
+        newData.amount = null;
+        newData.deposit_amount = currentAmount;
+      } else {
+        newData.amount = currentAmount;
+        newData.deposit_amount = null;
+      }
+    }
+    
+    setSelectedResult({ ...selectedResult, data: newData });
   };
 
   if (authLoading) {
@@ -661,8 +674,18 @@ export default function App() {
                                   type={field.type === 'number' ? 'text' : field.type} 
                                   inputMode={field.type === 'number' ? 'decimal' : undefined}
                                   className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100" 
-                                  value={selectedResult.data?.[field.key as keyof ReceiptData] || ''} 
-                                  onChange={e => handleDataChange(field.key as keyof ReceiptData, e.target.value)} 
+                                  value={
+                                    field.key === 'amount' 
+                                      ? (selectedResult.data.amount || selectedResult.data.deposit_amount || '') 
+                                      : (selectedResult.data?.[field.key as keyof ReceiptData] || '')
+                                  } 
+                                  onChange={e => {
+                                    // Map "Amount" field to the correct internal key based on category
+                                    const actualKey = (field.key === 'amount' && selectedResult.data.category === 'Deposit') 
+                                      ? 'deposit_amount' 
+                                      : (field.key as keyof ReceiptData);
+                                    handleDataChange(actualKey, e.target.value);
+                                  }} 
                                 />
                                 {field.key === 'amount' && (
                                   <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest pointer-events-none">BHD</span>
