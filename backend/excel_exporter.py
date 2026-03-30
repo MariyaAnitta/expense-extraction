@@ -62,40 +62,60 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str):
             ws['A3'] = f"For 01/01/{receipt_year} through 31/12/{receipt_year}"
     except: pass
 
+    def safe_float(val):
+        if val is None or val == "" or val == "null": return 0.0
+        try:
+            # Handle cases where BHD strings might have commas or extra labels
+            s = str(val).replace('BHD', '').replace(',', '').strip()
+            return float(s)
+        except: return 0.0
+
     # 2. Total Balance (D3)
     current_balance = 0
     for r in results_to_process:
+        if not r.data: continue
         current_balance += safe_float(r.data.deposit_amount)
         current_balance -= safe_float(r.data.amount)
             
     try:
         ws['D3'] = current_balance
-    except: pass
+    except Exception as e:
+        print(f"ERROR: Failed to update D3 balance: {e}")
 
     # 3. Data Rows (Starts at Row 5)
     row_idx = 5
     running_balance = 0
     
     for result in results_to_process:
-        if not result.data: continue
-        d = result.data
-        
-        # Add to balance
-        dep = safe_float(d.deposit_amount)
-        exp = safe_float(d.amount)
-        running_balance = running_balance + dep - exp
-        
-        # VALUES ONLY — Let the template handle alignment/styling
-        if d.date: ws.cell(row=row_idx, column=1, value=d.date)
-        if d.description: ws.cell(row=row_idx, column=2, value=d.description)
-        if dep != 0: ws.cell(row=row_idx, column=3, value=dep)
-        if exp != 0: ws.cell(row=row_idx, column=4, value=exp)
-        if d.received_by: ws.cell(row=row_idx, column=5, value=d.received_by)
-        
-        ws.cell(row=row_idx, column=6, value=running_balance)
-        ws.cell(row=row_idx, column=7, value=d.remarks or "ok")
-        
-        row_idx += 1
+        try:
+            if not result.data: continue
+            d = result.data
+            
+            # Add to balance
+            dep = safe_float(d.deposit_amount)
+            exp = safe_float(d.amount)
+            running_balance = running_balance + dep - exp
+            
+            # VALUES ONLY — Let the template handle alignment/styling
+            if d.date: 
+                ws.cell(row=row_idx, column=1, value=str(d.date))
+            
+            desc = d.description or d.category or "Expense"
+            ws.cell(row=row_idx, column=2, value=str(desc))
+            
+            if dep != 0: ws.cell(row=row_idx, column=3, value=dep)
+            if exp != 0: ws.cell(row=row_idx, column=4, value=exp)
+            
+            rb = d.received_by or ""
+            ws.cell(row=row_idx, column=5, value=str(rb))
+            
+            ws.cell(row=row_idx, column=6, value=running_balance)
+            ws.cell(row=row_idx, column=7, value=str(d.remarks or "ok"))
+            
+            row_idx += 1
+        except Exception as e:
+            print(f"ERROR: Failed to process row {row_idx}: {e}")
+            continue
 
     # NOTE: No "Total" row added here — the template already has built-in total formulas
 

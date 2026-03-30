@@ -156,7 +156,7 @@ async def run_batch_processor():
             db.collection("extractions").document(doc_id).update({"status": "FAILED", "error": str(e)})
         
         count += 1
-        await asyncio.sleep(5)
+        await asyncio.sleep(1)
     
     print(f"Zero-Bucket batch task finished. Total: {count}")
 
