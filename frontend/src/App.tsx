@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { doc, getDoc, collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import Login from './components/Login';
 import TeamManagement from './components/TeamManagement';
 import axios from 'axios';
