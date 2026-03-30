@@ -225,7 +225,8 @@ export default function App() {
         q = query(baseCol, where("team_id", "==", userData.team_id || "General"));
       }
     } else {
-      q = query(baseCol, where("user_id", "==", authUser.uid));
+      // General Users now see their own stuff AND automated team uploads
+      q = query(baseCol, where("team_id", "==", userData.team_id || "General"));
     }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {

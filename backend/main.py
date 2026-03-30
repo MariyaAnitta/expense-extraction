@@ -204,8 +204,8 @@ async def upload_batch(
             })
             uploaded_ids.append(doc_id)
             
-        # --- AUTO-TRIGGER the AI processor for manual uploads ---
-        background_tasks.add_task(run_batch_processor)
+        # --- AUTO-TRIGGER DISABLED FOR WEB UPLOADS PER USER REQUEST ---
+        # background_tasks.add_task(run_batch_processor)
             
         return {"status": "success", "count": len(uploaded_ids), "ids": uploaded_ids}
     except Exception as e:
@@ -385,7 +385,7 @@ async def update_extraction(doc_id: str, data: ReceiptData, role: str = "user"):
         return {"status": "error", "message": str(e)}
 
 @app.post("/add-manual")
-async def add_manual(data: Optional[ReceiptData] = None):
+async def add_manual(data: Optional[ReceiptData] = None, user_id: Optional[str] = None, team_id: Optional[str] = None):
     """Create a manual entry for accounting, either from default or from frontend draft."""
     try:
         if data:
@@ -410,7 +410,9 @@ async def add_manual(data: Optional[ReceiptData] = None):
             "data": data_dict,
             "upload_time": time.time(),
             "local_path": None, # No file for manual entries
-            "is_verified": True
+            "is_verified": True,
+            "user_id": user_id,
+            "team_id": team_id
         })
         return {"status": "success", "id": doc_ref[1].id}
     except Exception as e:
