@@ -311,10 +311,10 @@ async def upload_automation(
         return {"status": "error", "message": str(e)}
 
 @app.post("/clear-queue")
-async def clear_queue():
-    """Clear all records and files from storage"""
+async def clear_queue(team_id: str = "General"):
+    """Clear all records for a specific team from storage"""
     try:
-        docs = db.collection("extractions").stream()
+        docs = db.collection("extractions").where("team_id", "==", team_id).stream()
         deleted_count = 0
         for doc in docs:
             data = doc.to_dict()
