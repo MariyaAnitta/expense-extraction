@@ -4,13 +4,15 @@ import {
   Download, Trash2, Search, 
   LayoutDashboard, ShieldCheck, 
   TrendingUp, Zap, FolderOpen,
-  Plus, Loader2, Eye, X, Users
+  Plus, Loader2, Eye, X, Users,
+  BarChart3
 } from 'lucide-react';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import Login from './components/Login';
 import TeamManagement from './components/TeamManagement';
+import Analytics from './components/Analytics';
 import axios from 'axios';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -93,7 +95,7 @@ export default function App() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [userData, setUserData] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [currentView, setCurrentView] = useState<'board' | 'admin' | 'team'>('board');
+  const [currentView, setCurrentView] = useState<'board' | 'admin' | 'team' | 'analytics'>('board');
   
   const handleViewUserDashboard = (uid: string, email: string) => {
     setUserFilter(uid);
@@ -470,6 +472,9 @@ export default function App() {
           <div onClick={() => setCurrentView('board')}>
             <SidebarItem icon={LayoutDashboard} label="Board" active={currentView === 'board'} />
           </div>
+          <div onClick={() => setCurrentView('analytics')}>
+            <SidebarItem icon={BarChart3} label="Insights" active={currentView === 'analytics'} />
+          </div>
           {userRole === 'admin' && (
             <div onClick={() => setCurrentView('admin')}>
               <SidebarItem icon={ShieldCheck} label="Admin" active={currentView === 'admin'} />
@@ -537,7 +542,9 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
-          {currentView !== 'board' ? (
+          {currentView === 'analytics' ? (
+            <Analytics data={queue} userRole={userRole} />
+          ) : (currentView === 'admin' || currentView === 'team') ? (
             <TeamManagement userRole={userRole} userTeam={userData?.team_id} onViewDashboard={handleViewUserDashboard} />
           ) : (
             <>
