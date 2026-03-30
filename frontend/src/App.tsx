@@ -307,10 +307,14 @@ export default function App() {
   };
 
   const clearQueue = async () => {
-    if (!confirm("Are you sure you want to clear all documents?")) return;
+    const targetName = userFilter ? 'this member\'s' : 'your personal';
+    if (!confirm(`Are you sure you want to clear ${targetName} document queue?`)) return;
+    
     try {
-      const tid = userData?.team_id || "General";
-      await axios.post(`${API_URL}/clear-queue?team_id=${tid}`);
+      const uid = userFilter || authUser?.uid;
+      if (!uid) return;
+      
+      await axios.post(`${API_URL}/clear-queue?user_id=${uid}`);
       setSelectedResult(null);
     } catch (error) {
       console.error("Failed to clear queue", error);
