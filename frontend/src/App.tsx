@@ -210,28 +210,30 @@ export default function App() {
     let q;
     const baseCol = collection(db, "extractions");
 
+    const tid = (userData?.team_id || "General").toLowerCase();
+    
     if (userRole === "admin") {
       if (teamFilter === 'Global') {
         q = query(baseCol, orderBy("upload_time", "desc"));
       } else {
-        q = query(baseCol, where("team_id", "==", teamFilter), orderBy("upload_time", "desc"));
+        q = query(baseCol, where("team_id", "==", teamFilter.toLowerCase()), orderBy("upload_time", "desc"));
       }
     } else if (userRole === "leader") {
       if (userFilter) {
         // Leader viewing a specific user - show that user's entries + team-wide automation
         q = query(
           baseCol, 
-          where("team_id", "==", userData.team_id),
+          where("team_id", "==", tid),
           where("user_id", "in", [userFilter, "automation"]),
           orderBy("upload_time", "desc")
         );
       } else {
         // Leader viewing their own team dashboard
-        q = query(baseCol, where("team_id", "==", userData.team_id || "General"), orderBy("upload_time", "desc"));
+        q = query(baseCol, where("team_id", "==", tid), orderBy("upload_time", "desc"));
       }
     } else {
       // General User dashboard
-      q = query(baseCol, where("team_id", "==", userData.team_id || "General"), where("user_id", "in", [authUser.uid, 'automation']), orderBy("upload_time", "desc"));
+      q = query(baseCol, where("team_id", "==", tid), where("user_id", "in", [authUser.uid, 'automation']), orderBy("upload_time", "desc"));
     }
 
     if (!q) return;
