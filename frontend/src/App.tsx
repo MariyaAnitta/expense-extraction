@@ -8,9 +8,7 @@ import {
 } from 'lucide-react';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { 
-  collection, onSnapshot, query, doc, getDoc, where
-} from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import Login from './components/Login';
 import TeamManagement from './components/TeamManagement';
 import axios from 'axios';
@@ -211,23 +209,32 @@ export default function App() {
 
     let q;
     const baseCol = collection(db, "extractions");
-    
+
     if (userRole === "admin") {
       if (teamFilter === 'Global') {
-        q = query(baseCol);
+        q = query(baseCol, orderBy("upload_time", "desc"));
       } else {
-        q = query(baseCol, where("team_id", "==", teamFilter));
+        q = query(baseCol, where("team_id", "==", teamFilter), orderBy("upload_time", "desc"));
       }
     } else if (userRole === "leader") {
       if (userFilter) {
-        q = query(baseCol, where("user_id", "==", userFilter));
+        // Leader viewing a specific user - show that user's entries + team-wide automation
+        q = query(
+          baseCol, 
+          where("team_id", "==", userData.team_id),
+          where("user_id", "in", [userFilter, "automation"]),
+          orderBy("upload_time", "desc")
+        );
       } else {
-        q = query(baseCol, where("team_id", "==", userData.team_id || "General"));
+        // Leader viewing their own team dashboard
+        q = query(baseCol, where("team_id", "==", userData.team_id || "General"), orderBy("upload_time", "desc"));
       }
     } else {
-      // General Users now see their own stuff AND automated team uploads
-      q = query(baseCol, where("team_id", "==", userData.team_id || "General"));
+      // General User dashboard
+      q = query(baseCol, where("team_id", "==", userData.team_id || "General"), where("user_id", "in", [authUser.uid, 'automation']), orderBy("upload_time", "desc"));
     }
+
+    if (!q) return;
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const realResults: any[] = snapshot.docs.map(doc => {
@@ -574,14 +581,13 @@ export default function App() {
                           <tr>
                             <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Document</th>
                             <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Status</th>
-                            <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Amount (BHD)</th>
                             <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Confidence</th>
                             <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100 text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {queue.length === 0 ? (
-                            <tr><td colSpan={5} className="py-20 text-center text-slate-400">No documents in queue.</td></tr>
+                            <tr><td colSpan={4} className="py-20 text-center text-slate-400">No documents in queue.</td></tr>
                           ) : (
                             queue.map((item) => (
                               <tr key={item.file_id} onClick={() => setSelectedResult(item)} className={cn("cursor-pointer hover:bg-slate-50", selectedResult?.file_id === item.file_id && "bg-indigo-50/30")}>
@@ -617,11 +623,6 @@ export default function App() {
                                       <div className={cn("w-1 h-1 rounded-full", item.is_verified ? "bg-indigo-600 shadow-[0_0_4px_rgba(79,70,229,0.3)]" : "bg-slate-300")} />
                                       Leader
                                     </div>
-                                  </div>
-                                </td>
-                                <td className="px-8 py-4">
-                                  <div className="font-bold text-slate-700 text-sm">
-                                    {(item.data?.amount || item.data?.deposit_amount || '—')}
                                   </div>
                                 </td>
                                 <td className="px-8 py-4">
@@ -683,8 +684,8 @@ export default function App() {
                                   className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100" 
                                   value={
                                     field.key === 'amount' 
-                                      ? (selectedResult.data?.amount || selectedResult.data?.deposit_amount || '') 
-                                      : (selectedResult.data?.[field.key as keyof ReceiptData] || '')
+                                      ? (selectedResult.data?.amount ?? selectedResult.data?.deposit_amount ?? '') 
+                                      : (selectedResult.data?.[field.key as keyof ReceiptData] ?? '')
                                   } 
                                   onChange={e => {
                                     // Map "Amount" field to the correct internal key based on category

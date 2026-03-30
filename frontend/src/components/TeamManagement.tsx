@@ -42,8 +42,9 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
     if (userRole === 'admin') {
       q = query(baseCol, orderBy('created_at', 'desc'));
     } else {
-      // Leaders only see their own team
-      q = query(baseCol, where('team_id', '==', userTeam || 'General'), orderBy('created_at', 'desc'));
+      // Leaders only see their own team (case-insensitive approach)
+      const normalizedTeam = (userTeam || 'General').toLowerCase();
+      q = query(baseCol, where('team_id', 'in', [normalizedTeam, userTeam || 'General']), orderBy('created_at', 'desc'));
     }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
