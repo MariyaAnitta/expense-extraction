@@ -572,11 +572,17 @@ export default function App() {
                                   </div>
                                 </td>
                                 <td className="px-8 py-4">
-                                  <div className="flex items-center gap-2">
-                                    <span className={cn("text-[10px] font-black uppercase tracking-widest", item.status === 'COMPLETED' ? "text-emerald-600" : "text-indigo-600")}>
-                                      {item.status}
-                                    </span>
-                                    {item.is_verified && <ShieldCheck size={14} className="text-emerald-500" />}
+                                  <div className="flex flex-col gap-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <div className={cn("w-1.5 h-1.5 rounded-full", item.user_verified ? "bg-emerald-500" : "bg-slate-200")} />
+                                      <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">Employee</span>
+                                      {item.user_verified && <Check size={10} className="text-emerald-500" />}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <div className={cn("w-1.5 h-1.5 rounded-full", item.is_verified ? "bg-indigo-600 shadow-[0_0_8px_rgba(79,70,229,0.3)]" : "bg-slate-200")} />
+                                      <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">Leader</span>
+                                      {item.is_verified && <ShieldCheck size={10} className="text-indigo-600" />}
+                                    </div>
                                   </div>
                                 </td>
                                 <td className="px-8 py-4">
@@ -631,7 +637,12 @@ export default function App() {
                                 {field.options?.map(o => <option key={o} value={o}>{o}</option>)}
                               </select>
                             ) : (
-                              <input type={field.type} className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100" value={selectedResult.data?.[field.key as keyof ReceiptData] || ''} onChange={e => handleDataChange(field.key as keyof ReceiptData, e.target.value)} />
+                              <div className="relative">
+                                <input type={field.type} className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100" value={selectedResult.data?.[field.key as keyof ReceiptData] || ''} onChange={e => handleDataChange(field.key as keyof ReceiptData, e.target.value)} />
+                                {field.key === 'amount' && (
+                                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest pointer-events-none">BHD</span>
+                                )}
+                              </div>
                             )}
                           </div>
                         ))}
