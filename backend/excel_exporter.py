@@ -53,27 +53,16 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str):
         max_date = None
         receipt_year = datetime.now().year  # Fallback if no valid dates
 
-    # Update dynamic headers
+    # 1. Update Headers
     try:
         ws['F1'] = receipt_year
-    except: pass
-    
-    try:
         if min_date and max_date:
             ws['A3'] = f"For {min_date.strftime('%d/%m/%Y')} through {max_date.strftime('%d/%m/%Y')}"
         else:
             ws['A3'] = f"For 01/01/{receipt_year} through 31/12/{receipt_year}"
     except: pass
 
-    def safe_float(val):
-        if val is None or val == "": return 0.0
-        try:
-            # Handle cases where BHD strings might have commas or extra labels
-            s = str(val).replace('BHD', '').replace(',', '').strip()
-            return float(s)
-        except: return 0.0
-
-    # Calculate final balance for header (D3)
+    # 2. Total Balance (D3)
     current_balance = 0
     for r in results_to_process:
         current_balance += safe_float(r.data.deposit_amount)
@@ -81,30 +70,12 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str):
             
     try:
         ws['D3'] = current_balance
-        ws['D3'].number_format = bhd_format
     except: pass
 
-    # 4. Data Rows
-    # Find the row containing "Total" (usually at the bottom of the data area)
-    total_row_idx = None
-    for row in range(5, 500): # Scan first 500 rows
-        try:
-            val = str(ws.cell(row=row, column=1).value or "").lower()
-            if "total" in val:
-                total_row_idx = row
-                break
-        except: continue
-    
-    # Only insert rows if we have more data than empty space above the Total row
-    if total_row_idx and (len(results_to_process) > (total_row_idx - 6)):
-        needed = len(results_to_process) - (total_row_idx - 6)
-        if needed > 0:
-            ws.insert_rows(total_row_idx - 1, amount=needed)
-    
+    # 3. Data Rows (Starts at Row 5)
     row_idx = 5
     running_balance = 0
     
-    # Main Data rows
     for result in results_to_process:
         if not result.data: continue
         d = result.data
@@ -114,19 +85,14 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str):
         exp = safe_float(d.amount)
         running_balance = running_balance + dep - exp
         
-        # Values
+        # VALUES ONLY — Let the template handle alignment/styling
         if d.date: ws.cell(row=row_idx, column=1, value=d.date)
         if d.description: ws.cell(row=row_idx, column=2, value=d.description)
-        if dep != 0: 
-            ws.cell(row=row_idx, column=3, value=dep)
-            ws.cell(row=row_idx, column=3).number_format = bhd_format
-        if exp != 0: 
-            ws.cell(row=row_idx, column=4, value=exp)
-            ws.cell(row=row_idx, column=4).number_format = bhd_format
+        if dep != 0: ws.cell(row=row_idx, column=3, value=dep)
+        if exp != 0: ws.cell(row=row_idx, column=4, value=exp)
         if d.received_by: ws.cell(row=row_idx, column=5, value=d.received_by)
         
         ws.cell(row=row_idx, column=6, value=running_balance)
-        ws.cell(row=row_idx, column=6).number_format = bhd_format
         ws.cell(row=row_idx, column=7, value=d.remarks or "ok")
         
         row_idx += 1
