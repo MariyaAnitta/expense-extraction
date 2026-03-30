@@ -296,7 +296,8 @@ export default function App() {
   const clearQueue = async () => {
     if (!confirm("Are you sure you want to clear all documents?")) return;
     try {
-      await axios.post(`${API_URL}/clear-queue`);
+      const tid = userData?.team_id || "General";
+      await axios.post(`${API_URL}/clear-queue?team_id=${tid}`);
       setSelectedResult(null);
     } catch (error) {
       console.error("Failed to clear queue", error);
