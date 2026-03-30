@@ -60,7 +60,7 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
     setSuccess('');
     
     try {
-      const response = await axios.post(`${API_URL}/create-user`, {
+      await axios.post(`${API_URL}/create-user`, {
         email,
         password,
         role,
