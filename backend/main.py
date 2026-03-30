@@ -411,6 +411,8 @@ async def add_manual(data: Optional[ReceiptData] = None, user_id: Optional[str] 
             "upload_time": time.time(),
             "local_path": None, # No file for manual entries
             "is_verified": True,
+            "user_verified": True,
+            "leader_verified": True,
             "user_id": user_id,
             "team_id": team_id
         })
