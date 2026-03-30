@@ -567,21 +567,34 @@ export default function App() {
                               <tr key={item.file_id} onClick={() => setSelectedResult(item)} className={cn("cursor-pointer hover:bg-slate-50", selectedResult?.file_id === item.file_id && "bg-indigo-50/30")}>
                                 <td className="px-8 py-4">
                                   <div className="flex items-center gap-3">
-                                    <FileText size={18} className="text-slate-400" />
-                                    <span className="font-bold text-slate-800 text-sm truncate max-w-[150px]">{item.file_name}</span>
+                                    <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400">
+                                      <FileText size={20} />
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="font-bold text-slate-800 text-sm truncate max-w-[180px]">{item.file_name}</span>
+                                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{item.file_name.split('.').pop() || 'File'}</span>
+                                    </div>
                                   </div>
                                 </td>
                                 <td className="px-8 py-4">
-                                  <div className="flex flex-col gap-1.5">
+                                  <div className="flex flex-col gap-1.5 min-w-[120px]">
                                     <div className="flex items-center gap-2">
                                       <div className={cn("w-1.5 h-1.5 rounded-full", item.user_verified ? "bg-emerald-500" : "bg-slate-200")} />
                                       <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">Employee</span>
-                                      {item.user_verified && <Check size={10} className="text-emerald-500" />}
+                                      {item.user_verified ? (
+                                        <Check size={10} className="text-emerald-500" />
+                                      ) : (
+                                          <span className="h-2.5" /> 
+                                      )}
                                     </div>
                                     <div className="flex items-center gap-2">
                                       <div className={cn("w-1.5 h-1.5 rounded-full", item.is_verified ? "bg-indigo-600 shadow-[0_0_8px_rgba(79,70,229,0.3)]" : "bg-slate-200")} />
                                       <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">Leader</span>
-                                      {item.is_verified && <ShieldCheck size={10} className="text-indigo-600" />}
+                                      {item.is_verified ? (
+                                        <ShieldCheck size={10} className="text-indigo-600" />
+                                      ) : (
+                                        <span className="h-2.5" />
+                                      )}
                                     </div>
                                   </div>
                                 </td>
