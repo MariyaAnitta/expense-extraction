@@ -391,7 +391,7 @@ export default function App() {
     if (!selectedResult || !selectedResult.data) return;
     try {
       if (selectedResult.file_id === "draft-manual") {
-        await axios.post(`${API_URL}/add-manual`, selectedResult.data);
+        await axios.post(`${API_URL}/add-manual?user_id=${authUser?.uid}&team_id=${userData?.team_id || "General"}`, selectedResult.data);
         setSelectedResult(null);
       } else {
         await axios.post(`${API_URL}/update-extraction/${selectedResult.file_id}?role=${userRole}`, selectedResult.data);
@@ -651,7 +651,13 @@ export default function App() {
                               </select>
                             ) : (
                               <div className="relative">
-                                <input type={field.type} className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100" value={selectedResult.data?.[field.key as keyof ReceiptData] || ''} onChange={e => handleDataChange(field.key as keyof ReceiptData, e.target.value)} />
+                                <input 
+                                  type={field.type === 'number' ? 'text' : field.type} 
+                                  inputMode={field.type === 'number' ? 'decimal' : undefined}
+                                  className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100" 
+                                  value={selectedResult.data?.[field.key as keyof ReceiptData] || ''} 
+                                  onChange={e => handleDataChange(field.key as keyof ReceiptData, e.target.value)} 
+                                />
                                 {field.key === 'amount' && (
                                   <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest pointer-events-none">BHD</span>
                                 )}
