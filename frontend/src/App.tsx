@@ -207,39 +207,19 @@ export default function App() {
   useEffect(() => {
     if (!authUser || !userRole || !userData) return;
 
-    let q;
     const baseCol = collection(db, "extractions");
-
     const tid = (userData?.team_id || "General").toLowerCase();
     
-    if (userRole === "admin") {
-      if (teamFilter === 'Global') {
-        q = query(baseCol, orderBy("upload_time", "desc"));
-      } else {
-        q = query(baseCol, where("team_id", "==", teamFilter.toLowerCase()), orderBy("upload_time", "desc"));
-      }
-    } else if (userRole === "leader") {
-      if (userFilter) {
-        // Leader viewing a specific user - show that user's entries + team-wide automation
-        q = query(
-          baseCol, 
-          where("team_id", "==", tid),
-          where("user_id", "in", [userFilter, "automation"]),
-          orderBy("upload_time", "desc")
-        );
-      } else {
-        // Leader viewing their own team dashboard
-        q = query(baseCol, where("team_id", "==", tid), orderBy("upload_time", "desc"));
-      }
-    } else {
-      // General User dashboard
-      q = query(baseCol, where("team_id", "==", tid), where("user_id", "in", [authUser.uid, 'automation']), orderBy("upload_time", "desc"));
+    // Simplest query possible — No index required!
+    let q = query(baseCol, where("team_id", "==", tid));
+    if (userRole === "admin" && teamFilter === 'Global') {
+      q = query(baseCol);
+    } else if (userRole === "admin") {
+      q = query(baseCol, where("team_id", "==", teamFilter.toLowerCase()));
     }
 
-    if (!q) return;
-
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const realResults: any[] = snapshot.docs.map(doc => {
+      const allResults: any[] = snapshot.docs.map(doc => {
         const data = doc.data();
         return { 
           file_id: doc.id,
@@ -252,19 +232,31 @@ export default function App() {
           leader_verified: data.leader_verified || false,
           admin_verified: data.admin_verified || false,
           image_url: data.image_url,
-          upload_time: data.upload_time || 0
+          upload_time: data.upload_time || 0,
+          user_id: data.user_id,
+          team_id: data.team_id
         };
       });
+      
+      // Local filtering and sorting (Reliable & Zero-Index needed)
+      let filtered = allResults;
+      if (userRole === "user") {
+        filtered = allResults.filter(r => r.user_id === authUser.uid || r.user_id === 'automation');
+      } else if (userRole === "leader" && userFilter) {
+        filtered = allResults.filter(r => r.user_id === userFilter || r.user_id === 'automation');
+      }
 
-      realResults.sort((a, b) => b.upload_time - a.upload_time);
-
+      const sorted = filtered.sort((a, b) => (b.upload_time || 0) - (a.upload_time || 0));
+      
       setQueue(prevQueue => {
         const optimisticItems = prevQueue.filter(item => 
           item.file_id.startsWith('temp-') && 
-          !realResults.some(real => real.file_name === item.file_name || real.file_name === item.file_name?.split('/').pop())
+          !sorted.some(real => real.file_name === item.file_name || real.file_name === item.file_name?.split('/').pop())
         );
-        return [...realResults, ...optimisticItems];
+        return [...sorted, ...optimisticItems];
       });
+    }, (error) => {
+      console.error("Firestore Error:", error);
     });
     return () => unsubscribe();
   }, [authUser, userRole, userData, teamFilter, userFilter]);
