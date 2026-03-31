@@ -114,10 +114,10 @@ export default function App() {
   useEffect(() => {
     if (userRole !== 'admin') return;
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const teams = new Set<string>(['General']);
+      const teams = new Set<string>();
       snapshot.docs.forEach(doc => {
         const tid = doc.data().team_id;
-        if (tid) teams.add(tid);
+        if (tid && tid !== 'Global' && tid !== 'General') teams.add(tid);
       });
       setAvailableTeams(Array.from(teams).sort());
     });
@@ -216,6 +216,8 @@ export default function App() {
     let q = query(baseCol, where("team_id", "==", tid));
     if (userRole === "admin" && teamFilter === 'Global') {
       q = query(baseCol);
+    } else if (userRole === "admin" && teamFilter === 'Admin Personal') {
+      q = query(baseCol); // Filtered via JS below to avoid index requirement
     } else if (userRole === "admin") {
       q = query(baseCol, where("team_id", "==", teamFilter.toLowerCase()));
     }
@@ -244,7 +246,9 @@ export default function App() {
       let filtered = allResults;
       
       if (userRole === "admin") {
-        if (teamFilter !== 'Global') {
+        if (teamFilter === 'Admin Personal') {
+          filtered = allResults.filter(r => r.user_id === authUser.uid || r.user_id === 'automation');
+        } else if (teamFilter !== 'Global') {
           filtered = allResults.filter(r => r.team_id?.toLowerCase() === teamFilter.toLowerCase());
         }
       } else if (userRole === "leader") {
@@ -509,7 +513,8 @@ export default function App() {
               <div className="flex items-center gap-3 bg-white/50 backdrop-blur-sm px-4 py-2 rounded-2xl border border-slate-200">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">View Team:</span>
                 <select value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)} className="bg-transparent border-none text-sm font-bold text-indigo-600 outline-none cursor-pointer">
-                  <option value="Global">All Teams (Global)</option>
+                  <option value="Global">Company General</option>
+                  <option value="Admin Personal">Admin Personal</option>
                   {availableTeams.map(team => <option key={team} value={team}>{team}</option>)}
                 </select>
               </div>
