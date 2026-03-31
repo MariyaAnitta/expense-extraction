@@ -257,7 +257,7 @@ export default function App() {
         if (userFilter) {
           filtered = allResults.filter(r => r.user_id === userFilter || r.user_id === 'automation');
         } else if (teamFilter === 'Admin Personal') {
-          filtered = allResults.filter(r => r.user_id === authUser.uid || r.user_id === 'automation');
+          filtered = allResults.filter(r => r.user_id === authUser.uid);
         } else if (teamFilter !== 'Global') {
           filtered = allResults.filter(r => r.team_id?.toLowerCase() === teamFilter.toLowerCase());
         }
