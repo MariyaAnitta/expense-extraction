@@ -218,7 +218,7 @@ export default function Analytics({ data, userRole }: AnalyticsProps) {
                   ? 'As a system admin, you have global visibility across all departments and verified expense logs.'
                   : userRole === 'leader'
                   ? 'As a team leader, you can review team expenses, approve pending receipts, and monitor department budgets.'
-                  : 'Track your personal spending habits and verify your receipts for reimbursement.'
+                  : 'As a general user, you can upload receipts, track expenses, and export your logs.'
                 }
               </p>
             </div>
