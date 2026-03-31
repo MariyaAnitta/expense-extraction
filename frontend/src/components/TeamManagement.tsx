@@ -19,7 +19,7 @@ interface UserData {
 interface TeamManagementProps {
   userRole: string | null;
   userTeam: string | null;
-  onViewDashboard: (uid: string, email: string) => void;
+  onViewDashboard: (uid: string, email: string, team_id: string) => void;
 }
 
 export default function TeamManagement({ userRole, userTeam, onViewDashboard }: TeamManagementProps) {
@@ -233,7 +233,7 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
                   <td className="px-8 py-5 text-right">
                     <div className="flex items-center justify-end gap-2">
                        <button 
-                        onClick={() => onViewDashboard(u.uid, u.email)}
+                        onClick={() => onViewDashboard(u.uid, u.email, u.team_id)}
                         className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2 border border-indigo-100"
                       >
                         <LayoutDashboard size={14} /> Open Dashboard

@@ -97,9 +97,12 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [currentView, setCurrentView] = useState<'board' | 'admin' | 'team' | 'analytics'>('board');
   
-  const handleViewUserDashboard = (uid: string, email: string) => {
+  const handleViewUserDashboard = (uid: string, email: string, team_id?: string) => {
     setUserFilter(uid);
     setMemberEmail(email);
+    if (userRole === 'admin' && team_id) {
+       setTeamFilter(team_id);
+    }
     setCurrentView('board');
   };
   
@@ -114,12 +117,17 @@ export default function App() {
   useEffect(() => {
     if (userRole !== 'admin') return;
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const teams = new Set<string>();
+      const teams = new Map<string, string>();
       snapshot.docs.forEach(doc => {
         const tid = doc.data().team_id;
-        if (tid && tid !== 'Global' && tid !== 'General') teams.add(tid);
+        if (tid) {
+          const lower = tid.toLowerCase();
+          if (lower !== 'global' && lower !== 'general' && !teams.has(lower)) {
+            teams.set(lower, tid);
+          }
+        }
       });
-      setAvailableTeams(Array.from(teams).sort());
+      setAvailableTeams(Array.from(teams.values()).sort());
     });
     return () => unsubscribe();
   }, [userRole]);
@@ -246,7 +254,9 @@ export default function App() {
       let filtered = allResults;
       
       if (userRole === "admin") {
-        if (teamFilter === 'Admin Personal') {
+        if (userFilter) {
+          filtered = allResults.filter(r => r.user_id === userFilter || r.user_id === 'automation');
+        } else if (teamFilter === 'Admin Personal') {
           filtered = allResults.filter(r => r.user_id === authUser.uid || r.user_id === 'automation');
         } else if (teamFilter !== 'Global') {
           filtered = allResults.filter(r => r.team_id?.toLowerCase() === teamFilter.toLowerCase());
