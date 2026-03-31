@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
-import { Users, UserPlus, Trash2, Mail, Shield, CheckCircle2, LayoutDashboard } from 'lucide-react';
+import { Users, UserPlus, Trash2, Mail, Shield, CheckCircle2, LayoutDashboard, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
 
@@ -116,6 +116,32 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
             className="bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-full flex items-center gap-2 font-bold text-sm shadow-lg shadow-slate-200 transition-all active:scale-95"
           >
             {showAddForm ? 'Cancel' : <><UserPlus size={18} /> Invite Member</>}
+          </button>
+        )}
+
+        {userRole === 'leader' && (
+          <button 
+            onClick={async () => {
+              try {
+                const response = await axios.get(`${API_URL}/export-excel`, {
+                  params: { team_id: userTeam || 'General' },
+                  responseType: 'blob'
+                });
+                const dateStr = new Date().toISOString().split('T')[0];
+                const url = window.URL.createObjectURL(new Blob([response.data]));
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', `Team_${userTeam || 'General'}_Full_Log_${dateStr}.xlsx`);
+                document.body.appendChild(link);
+                link.click();
+                window.URL.revokeObjectURL(url);
+              } catch (err) {
+                console.error('Team export failed', err);
+              }
+            }}
+            className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full flex items-center gap-2 font-black text-sm shadow-lg shadow-emerald-100 transition-all active:scale-95"
+          >
+            <Download size={18} /> Export Team Excel
           </button>
         )}
       </div>

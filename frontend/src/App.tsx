@@ -392,24 +392,49 @@ export default function App() {
     }
 
     try {
-      let params = {};
+      let params: any = {};
+      let fileName = '';
+      const dateStr = new Date().toISOString().split('T')[0];
+
       if (userRole === "admin") {
-        if (teamFilter !== 'Global') params = { team_id: teamFilter };
+        if (userFilter) {
+          // Admin drilling into a specific user
+          params = { user_id: userFilter };
+          fileName = `User_${memberEmail?.split('@')[0] || 'Member'}_Log_${dateStr}.xlsx`;
+        } else if (teamFilter === 'Admin Personal') {
+          params = { user_id: authUser?.uid };
+          fileName = `Admin_Personal_Log_${dateStr}.xlsx`;
+        } else if (teamFilter !== 'Global') {
+          params = { team_id: teamFilter };
+          fileName = `Team_${teamFilter}_Log_${dateStr}.xlsx`;
+        } else {
+          // Global — no filters
+          fileName = `Global_Petty_Cash_Log_${dateStr}.xlsx`;
+        }
       } else if (userRole === "leader") {
-        params = { team_id: userData?.team_id || "General" };
+        if (userFilter) {
+          // Leader drilling into a specific user's dashboard (user + automation)
+          params = { user_id: userFilter, team_id: userData?.team_id || "General" };
+          fileName = `User_${memberEmail?.split('@')[0] || 'Member'}_Log_${dateStr}.xlsx`;
+        } else if (currentView === 'team') {
+          // Leader on Team Oversight tab — full team export
+          params = { team_id: userData?.team_id || "General" };
+          fileName = `Team_${userData?.team_id || 'General'}_Full_Log_${dateStr}.xlsx`;
+        } else {
+          // Leader's own personal dashboard (own uploads + team automation)
+          params = { user_id: authUser?.uid, team_id: userData?.team_id || "General" };
+          fileName = `Leader_Personal_Log_${dateStr}.xlsx`;
+        }
       } else {
-        // General Users now export their whole TEAM data (matching their dashboard)
+        // General Users export their whole TEAM data (matching their dashboard)
         params = { team_id: userData?.team_id || "General" };
+        fileName = `Team_${userData?.team_id || 'General'}_Log_${dateStr}.xlsx`;
       }
 
       const response = await axios.get(`${API_URL}/export-excel`, { 
         params, 
         responseType: 'blob' 
       });
-      
-      const fileName = teamFilter === 'Global' 
-        ? `Global_Petty_Cash_Log_${new Date().toISOString().split('T')[0]}.xlsx`
-        : `Team_${teamFilter}_Log_${new Date().toISOString().split('T')[0]}.xlsx`;
 
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');

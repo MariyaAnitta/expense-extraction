@@ -439,23 +439,59 @@ async def export_excel(team_id: Optional[str] = None, user_id: Optional[str] = N
             .where("is_verified", "==", True)
             
         # Apply role-based filters if provided
-        if team_id:
+        if user_id and team_id:
+            # Personal + Automation: fetch by team, then JS-filter for user + automation
             docs_ref_query = docs_ref_query.where("team_id", "==", team_id)
+            docs_ref = docs_ref_query.stream()
+            results = []
+            for doc in docs_ref:
+                data = doc.to_dict()
+                if data.get("user_id") == user_id or data.get("user_id") == "automation":
+                    res = ExtractionResult(
+                        file_id=doc.id,
+                        file_name=data.get("name", "Unknown File"),
+                        status=data.get("status", "COMPLETED"),
+                        data=data.get("data")
+                    )
+                    results.append(res)
+        elif team_id:
+            docs_ref_query = docs_ref_query.where("team_id", "==", team_id)
+            docs_ref = docs_ref_query.stream()
+            results = []
+            for doc in docs_ref:
+                data = doc.to_dict()
+                res = ExtractionResult(
+                    file_id=doc.id,
+                    file_name=data.get("name", "Unknown File"),
+                    status=data.get("status", "COMPLETED"),
+                    data=data.get("data")
+                )
+                results.append(res)
         elif user_id:
             docs_ref_query = docs_ref_query.where("user_id", "==", user_id)
-            
-        docs_ref = docs_ref_query.stream()
-        
-        results = []
-        for doc in docs_ref:
-            data = doc.to_dict()
-            res = ExtractionResult(
-                file_id=doc.id,
-                file_name=data.get("name", "Unknown File"),
-                status=data.get("status", "COMPLETED"),
-                data=data.get("data")
-            )
-            results.append(res)
+            docs_ref = docs_ref_query.stream()
+            results = []
+            for doc in docs_ref:
+                data = doc.to_dict()
+                res = ExtractionResult(
+                    file_id=doc.id,
+                    file_name=data.get("name", "Unknown File"),
+                    status=data.get("status", "COMPLETED"),
+                    data=data.get("data")
+                )
+                results.append(res)
+        else:
+            docs_ref = docs_ref_query.stream()
+            results = []
+            for doc in docs_ref:
+                data = doc.to_dict()
+                res = ExtractionResult(
+                    file_id=doc.id,
+                    file_name=data.get("name", "Unknown File"),
+                    status=data.get("status", "COMPLETED"),
+                    data=data.get("data")
+                )
+                results.append(res)
         
         if not results:
             return {"error": "No completed extractions to export"}
