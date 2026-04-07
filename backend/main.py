@@ -60,9 +60,23 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"status": "error", "message": str(exc)},
     )
 
-@app.get("/")
+from fastapi.responses import HTMLResponse
+
+@app.get("/", response_class=HTMLResponse)
 async def root():
-    return {"message": "Expense Extraction Portal API is running"}
+    return """
+    <!DOCTYPE html>
+    <html>
+        <head>
+            <meta name="google-site-verification" content="ruy31GLsjKSOAbHT2rqLVYNvKJZi6O60MhOjAKjZdLI" />
+            <title>Expense Extraction API</title>
+        </head>
+        <body>
+            <h1>Expense Extraction Portal API is running</h1>
+            <p>Google Drive Webhook Integration Active</p>
+        </body>
+    </html>
+    """
 
 @app.get("/debug-supabase")
 async def debug_supabase():
