@@ -545,3 +545,163 @@ async def create_user(req: CreateUserRequest):
         print(f"Error creating user: {error_msg}")
         from fastapi.responses import JSONResponse
         return JSONResponse(status_code=400, content={"error": str(e)})
+
+# ============================================================
+# GOOGLE DRIVE INTEGRATION
+# Watches a shared Drive folder for new receipt uploads.
+# When a new file is detected, downloads and processes it
+# through the existing Gemini AI pipeline.
+# ============================================================
+
+from drive_watcher import get_drive_service, register_watch, list_new_files, download_file
+
+# Configuration from environment
+DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "1Rx6fEVyV0Ne4B-PDYHR_skFqrv4ytwKE")
+DRIVE_TEAM_ID = os.getenv("GOOGLE_DRIVE_TEAM_ID", "finance1")
+BACKEND_URL = os.getenv("BACKEND_URL", "https://expense-extraction.onrender.com")
+
+# Track which files we've already processed (in-memory; resets on restart)
+_processed_drive_files: set = set()
+
+# Initialize Drive service at module level
+_drive_service = None
+
+def _get_drive():
+    global _drive_service
+    if _drive_service is None:
+        _drive_service = get_drive_service()
+    return _drive_service
+
+
+async def _process_drive_files(background_tasks: BackgroundTasks = None):
+    """Scan the Drive folder for new files and process any we haven't seen."""
+    service = _get_drive()
+    if not service:
+        print("Drive service not available. Skipping scan.")
+        return 0
+
+    files = list_new_files(service, DRIVE_FOLDER_ID)
+    new_count = 0
+
+    for file_info in files:
+        file_id = file_info['id']
+        file_name = file_info['name']
+        
+        # Skip already-processed files
+        if file_id in _processed_drive_files:
+            continue
+        
+        # Also check Firestore to avoid re-processing after restarts
+        existing = db.collection("extractions").where("drive_file_id", "==", file_id).limit(1).stream()
+        if any(True for _ in existing):
+            _processed_drive_files.add(file_id)
+            continue
+
+        print(f"New Drive file detected: {file_name} (ID: {file_id})")
+        
+        # Download the file
+        local_path = download_file(service, file_id, file_name)
+        if not local_path:
+            continue
+
+        # Create Firestore record (same structure as automation uploads)
+        doc_ref = db.collection("extractions").add({
+            "name": file_name,
+            "status": "QUEUED",
+            "upload_time": time.time(),
+            "user_id": "automation",
+            "team_id": DRIVE_TEAM_ID,
+            "is_verified": False,
+            "data": None,
+            "temp_local_path": local_path,
+            "source": "google_drive",
+            "drive_file_id": file_id
+        })
+        
+        _processed_drive_files.add(file_id)
+        new_count += 1
+        print(f"Queued Drive file for processing: {file_name}")
+
+    # Auto-trigger the AI processor if we found new files
+    if new_count > 0:
+        if background_tasks:
+            background_tasks.add_task(run_batch_processor)
+        else:
+            await run_batch_processor()
+        print(f"Drive scan complete. {new_count} new files queued for AI extraction.")
+    
+    return new_count
+
+
+@app.post("/drive-webhook")
+async def drive_webhook(request: Request, background_tasks: BackgroundTasks):
+    """
+    Webhook endpoint that Google Drive calls when files change in the watched folder.
+    Google sends minimal data in the headers; we respond by scanning for new files.
+    """
+    resource_state = request.headers.get("X-Goog-Resource-State", "")
+    channel_id = request.headers.get("X-Goog-Channel-ID", "")
+    
+    print(f"Drive Webhook received: state={resource_state}, channel={channel_id}")
+    
+    # 'sync' = initial verification, 'update' = actual change
+    if resource_state == "sync":
+        print("Drive webhook sync confirmation received.")
+        return {"status": "sync_ok"}
+    
+    # Process new files
+    new_count = await _process_drive_files(background_tasks)
+    return {"status": "processed", "new_files": new_count}
+
+
+@app.post("/register-drive-watch")
+async def register_drive_watch():
+    """
+    Manually register (or re-register) the Google Drive push notification channel.
+    Call this once after deployment, and it will auto-renew on server restart.
+    """
+    service = _get_drive()
+    if not service:
+        return {"status": "error", "message": "Drive service not initialized. Check credentials."}
+    
+    webhook_url = f"{BACKEND_URL}/drive-webhook"
+    channel_id = f"expense-drive-{int(time.time())}"
+    
+    result = register_watch(service, DRIVE_FOLDER_ID, webhook_url, channel_id)
+    
+    if result:
+        return {
+            "status": "success",
+            "channel_id": result.get("id"),
+            "expiration": result.get("expiration"),
+            "webhook_url": webhook_url
+        }
+    else:
+        return {"status": "error", "message": "Failed to register watch. Check server logs."}
+
+
+@app.get("/scan-drive")
+async def scan_drive(background_tasks: BackgroundTasks):
+    """
+    Manual trigger to scan the Drive folder for new files.
+    Useful as a fallback if webhooks aren't working, or for testing.
+    """
+    new_count = await _process_drive_files(background_tasks)
+    return {"status": "success", "new_files_found": new_count}
+
+
+@app.on_event("startup")
+async def startup_drive_watch():
+    """Auto-register the Drive watch when the server starts."""
+    try:
+        service = _get_drive()
+        if service:
+            webhook_url = f"{BACKEND_URL}/drive-webhook"
+            channel_id = f"expense-drive-{int(time.time())}"
+            register_watch(service, DRIVE_FOLDER_ID, webhook_url, channel_id)
+            print("Drive watch auto-registered on startup.")
+        else:
+            print("Skipping Drive watch registration (service not available).")
+    except Exception as e:
+        print(f"Drive watch startup registration failed (non-blocking): {e}")
+
