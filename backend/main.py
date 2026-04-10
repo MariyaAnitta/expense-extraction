@@ -543,14 +543,16 @@ async def create_user(req: CreateUserRequest):
             email=req.email,
             password=req.password
         )
+        # Ensure clean team_id, strip hidden spaces, default to general
+        clean_team = (req.team_id or "general").strip().lower()
+
         # Store rich metadata in Firestore roles table
         db.collection("users").document(user_record.uid).set({
-            "uid": user_record.uid,
             "email": req.email,
             "role": req.role,
-            "team_id": (req.team_id or "general").lower(),
-            "status": "active",
-            "created_at": time.time()
+            "team_id": clean_team,
+            "created_at": time.time(),
+            "status": "active"
         })
         return {"status": "success", "uid": user_record.uid, "message": "User created successfully"}
     except Exception as e:
