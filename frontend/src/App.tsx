@@ -201,6 +201,7 @@ export default function App() {
 
   // Stats derived from queue
   const totalCompleted = queue.filter(r => r.status === 'COMPLETED').length;
+  const pendingApprovalsCount = queue.filter(r => r.user_verified && !r.is_verified).length;
   const avgConfidence = totalCompleted > 0 
     ? (queue.filter(r => r.data).reduce((acc, curr) => acc + (curr.data?.confidence || 0), 0) / totalCompleted).toFixed(0) 
     : '0';
@@ -594,6 +595,26 @@ export default function App() {
                 <StatCard icon={ShieldCheck} label="Avg. Confidence" value={`${avgConfidence}%`} subtext="AI Score" colorClass="text-indigo-500" />
               </div>
 
+              {(userRole === 'admin' || userRole === 'leader') && pendingApprovalsCount > 0 && (
+                <div className="bg-rose-50 border border-rose-200 rounded-[2rem] p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-rose-100 rounded-2xl flex items-center justify-center text-rose-600 shadow-inner">
+                      <Zap size={22} className="animate-pulse" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-rose-900 tracking-tight">Action Required: Pending Approvals</h3>
+                      <p className="text-sm text-rose-600 font-medium mt-0.5">You have {pendingApprovalsCount} receipt{pendingApprovalsCount !== 1 ? 's' : ''} waiting for your final verification.</p>
+                    </div>
+                  </div>
+                  <button onClick={() => {
+                     const element = document.getElementById("queue-table-header");
+                     if (element) element.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }} className="px-6 py-3 bg-rose-600 text-white text-sm font-bold rounded-full shadow-lg shadow-rose-200 hover:bg-rose-700 transition-all hover:scale-105 active:scale-95 text-nowrap">
+                    Review Now
+                  </button>
+                </div>
+              )}
+
               <div 
                 className={cn(
                   "bg-white rounded-[2.5rem] border-2 border-dashed p-10 transition-all duration-500 group",
@@ -628,7 +649,7 @@ export default function App() {
               <div className="grid grid-cols-12 gap-8 items-start">
                 <div className="col-span-8">
                   <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden min-h-[500px]">
-                    <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
+                    <div id="queue-table-header" className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
                       <h3 className="text-lg font-bold text-slate-800">Document Queue</h3>
                       <button onClick={clearQueue} className="text-rose-500 font-black text-[10px] uppercase tracking-widest">CLEAR ALL</button>
                     </div>
@@ -675,9 +696,14 @@ export default function App() {
                                       "px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all text-nowrap",
                                       item.is_verified 
                                         ? "bg-indigo-50 text-indigo-600 border border-indigo-100/50 shadow-sm shadow-indigo-100/20" 
-                                        : "bg-slate-50 text-slate-400 border border-slate-100"
+                                        : (item.user_verified ? "bg-rose-50 text-rose-600 border border-rose-200 shadow-sm shadow-rose-100" : "bg-slate-50 text-slate-400 border border-slate-100")
                                     )}>
-                                      <div className={cn("w-1 h-1 rounded-full", item.is_verified ? "bg-indigo-600 shadow-[0_0_4px_rgba(79,70,229,0.3)]" : "bg-slate-300")} />
+                                      <div className={cn(
+                                        "w-1 h-1 rounded-full", 
+                                        item.is_verified 
+                                          ? "bg-indigo-600 shadow-[0_0_4px_rgba(79,70,229,0.3)]" 
+                                          : (item.user_verified ? "bg-rose-500 animate-pulse" : "bg-slate-300")
+                                      )} />
                                       Leader
                                     </div>
                                   </div>
@@ -780,7 +806,7 @@ export default function App() {
                                 ? "bg-emerald-500 text-white" : "bg-slate-900 text-white hover:bg-black"
                             )}
                           >
-                            {((userRole === 'admin' || userRole === 'leader') ? selectedResult?.is_verified : selectedResult?.user_verified) ? 'VERIFIED' : 'CONFIRM DETAILS'}
+                            {((userRole === 'admin' || userRole === 'leader') ? selectedResult?.is_verified : selectedResult?.user_verified) ? 'VERIFIED' : ((userRole === 'admin' || userRole === 'leader') ? 'APPROVE & VERIFY' : 'CONFIRM DETAILS')}
                           </button>
                         </div>
                       </div>
