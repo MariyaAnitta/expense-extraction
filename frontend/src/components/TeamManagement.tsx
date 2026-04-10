@@ -120,29 +120,49 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
         )}
 
         {userRole === 'leader' && (
-          <button 
-            onClick={async () => {
-              try {
-                const response = await axios.get(`${API_URL}/export-excel`, {
-                  params: { team_id: userTeam || 'General' },
-                  responseType: 'blob'
-                });
-                const dateStr = new Date().toISOString().split('T')[0];
-                const url = window.URL.createObjectURL(new Blob([response.data]));
-                const link = document.createElement('a');
-                link.href = url;
-                link.setAttribute('download', `Team_${userTeam || 'General'}_Full_Log_${dateStr}.xlsx`);
-                document.body.appendChild(link);
-                link.click();
-                window.URL.revokeObjectURL(url);
-              } catch (err) {
-                console.error('Team export failed', err);
-              }
-            }}
-            className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full flex items-center gap-2 font-black text-sm shadow-lg shadow-emerald-100 transition-all active:scale-95"
-          >
-            <Download size={18} /> Export Team Excel
-          </button>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={async () => {
+                const targetName = userTeam || 'General';
+                if (!confirm(`DANGER: Are you absolutely sure you want to WIPE ALL ${targetName} TEAM DATA? This deletes all member uploads AND automation uploads permanently to start a fresh year.`)) return;
+                
+                try {
+                  await axios.post(`${API_URL}/clear-queue?team_id=${targetName}`);
+                  alert('All team data has been successfully wiped clean.');
+                } catch (error) {
+                  console.error("Failed to wipe team queue", error);
+                  alert('Failed to wipe team data.');
+                }
+              }}
+              className="px-6 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-full flex items-center gap-2 font-black text-sm shadow-lg shadow-rose-100 transition-all active:scale-95"
+            >
+              <Trash2 size={18} /> Wipe Complete Team
+            </button>
+
+            <button 
+              onClick={async () => {
+                try {
+                  const response = await axios.get(`${API_URL}/export-excel`, {
+                    params: { team_id: userTeam || 'General' },
+                    responseType: 'blob'
+                  });
+                  const dateStr = new Date().toISOString().split('T')[0];
+                  const url = window.URL.createObjectURL(new Blob([response.data]));
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.setAttribute('download', `Team_${userTeam || 'General'}_Full_Log_${dateStr}.xlsx`);
+                  document.body.appendChild(link);
+                  link.click();
+                  window.URL.revokeObjectURL(url);
+                } catch (err) {
+                  console.error('Team export failed', err);
+                }
+              }}
+              className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full flex items-center gap-2 font-black text-sm shadow-lg shadow-emerald-100 transition-all active:scale-95"
+            >
+              <Download size={18} /> Export Team Excel
+            </button>
+          </div>
         )}
       </div>
 
