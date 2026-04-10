@@ -427,9 +427,9 @@ export default function App() {
           fileName = `Leader_Personal_Log_${dateStr}.xlsx`;
         }
       } else {
-        // General Users export their whole TEAM data (matching their dashboard)
-        params = { team_id: userData?.team_id || "General" };
-        fileName = `Team_${userData?.team_id || 'General'}_Log_${dateStr}.xlsx`;
+        // General Users export their personal data + automation (matching their dashboard)
+        params = { user_id: authUser?.uid, team_id: userData?.team_id || "General" };
+        fileName = `User_Personal_Log_${dateStr}.xlsx`;
       }
 
       const response = await axios.get(`${API_URL}/export-excel`, { 
