@@ -24,13 +24,22 @@ interface TeamManagementProps {
 
 export default function TeamManagement({ userRole, userTeam, onViewDashboard }: TeamManagementProps) {
   const [users, setUsers] = useState<UserData[]>([]);
+  const [entities, setEntities] = useState<any[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showEntityForm, setShowEntityForm] = useState(false);
   
   // New user form state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('user');
   const [teamId, setTeamId] = useState(userTeam || 'General');
+  const [entityId, setEntityId] = useState('default');
+  
+  // New entity form state
+  const [entityName, setEntityName] = useState('');
+  const [entityCurrency, setEntityCurrency] = useState('BHD');
+  const [entitySymbol, setEntitySymbol] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -41,6 +50,7 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
     
     if (userRole === 'admin') {
       q = query(baseCol, orderBy('created_at', 'desc'));
+      axios.get(`${API_URL}/entities`).then(res => setEntities(res.data.entities || [])).catch(console.error);
     } else {
       // Simplest query for reliability — fetch all and filter in JS
       q = query(baseCol);
@@ -73,7 +83,8 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
         email,
         password,
         role,
-        team_id: userRole === 'admin' ? teamId : userTeam
+        team_id: userRole === 'admin' ? teamId : userTeam,
+        entity_id: userRole === 'admin' ? entityId : 'default'
       });
       setSuccess(`Successfully created account for ${email}`);
       setEmail('');
@@ -95,6 +106,33 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
     }
   };
 
+  const handleCreateEntity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    
+    try {
+      await axios.post(`${API_URL}/create-entity`, {
+        name: entityName,
+        currency: entityCurrency,
+        symbol: entitySymbol
+      });
+      setSuccess(`Successfully created entity: ${entityName}`);
+      setEntityName('');
+      setEntityCurrency('BHD');
+      setEntitySymbol('');
+      // Refresh entities list
+      const res = await axios.get(`${API_URL}/entities`);
+      setEntities(res.data.entities || []);
+      setTimeout(() => setShowEntityForm(false), 2000);
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || 'Failed to create entity');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
@@ -111,12 +149,20 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
             The user said "Only you (Admin) can see the Invite Member button" but then asked "how the leader can have a page to see his team".
             I will show the button to Admin only. */}
         {userRole === 'admin' && (
-          <button 
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-full flex items-center gap-2 font-bold text-sm shadow-lg shadow-slate-200 transition-all active:scale-95"
-          >
-            {showAddForm ? 'Cancel' : <><UserPlus size={18} /> Invite Member</>}
-          </button>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setShowAddForm(!showAddForm)}
+              className="bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-full flex items-center gap-2 font-bold text-sm shadow-lg shadow-slate-200 transition-all active:scale-95"
+            >
+              {showAddForm ? 'Cancel' : <><UserPlus size={18} /> Invite Member</>}
+            </button>
+            <button 
+              onClick={() => setShowEntityForm(!showEntityForm)}
+              className="bg-white border text-slate-700 hover:bg-slate-50 border-slate-200 px-6 py-3 rounded-full flex items-center gap-2 font-bold text-sm shadow-sm transition-all active:scale-95"
+            >
+              {showEntityForm ? 'Cancel' : 'Manage Entities'}
+            </button>
+          </div>
         )}
 
         {userRole === 'leader' && (
@@ -211,6 +257,14 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
                 </div>
 
                 <div className="space-y-2">
+                  <label className="text-[10px] text-slate-400 font-black uppercase tracking-widest ml-1 block">Assigned Entity</label>
+                  <select value={entityId} onChange={(e) => setEntityId(e.target.value)} className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none appearance-none">
+                    <option value="default" disabled>Select an Entity...</option>
+                    {entities.map(e => <option key={e.id} value={e.id}>{e.name} ({e.currency})</option>)}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
                   <label className="text-[10px] text-slate-400 font-black uppercase tracking-widest ml-1 block">Department / Team ID</label>
                   <input type="text" value={teamId} onChange={(e) => setTeamId(e.target.value)} className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none" placeholder="e.g. Marketing, IT, Ops" />
                 </div>
@@ -218,6 +272,46 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
                 <div className="col-span-2 flex justify-end mt-4">
                   <button type="submit" disabled={loading} className="bg-indigo-600 text-white px-10 py-3.5 rounded-full font-bold text-sm hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-indigo-200">
                     {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Provision Account'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showEntityForm && userRole === 'admin' && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0, scale: 0.95 }}
+            animate={{ opacity: 1, height: 'auto', scale: 1 }}
+            exit={{ opacity: 0, height: 0, scale: 0.95 }}
+            className="overflow-hidden mb-8"
+          >
+            <div className="bg-white p-8 rounded-[2rem] border border-indigo-200 shadow-sm relative overflow-hidden">
+              <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+                <Shield size={20} className="text-indigo-500" /> Register Corporate Entity
+              </h3>
+
+              {error && <div className="mb-6 p-4 bg-rose-50 text-rose-600 rounded-xl text-sm font-bold border border-rose-100">{error}</div>}
+              {success && <div className="mb-6 p-4 bg-emerald-50 text-emerald-600 rounded-xl text-sm font-bold border border-emerald-100 flex items-center gap-2"><CheckCircle2 size={18} /> {success}</div>}
+
+              <form onSubmit={handleCreateEntity} className="grid grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] text-slate-400 font-black uppercase tracking-widest ml-1 block">Entity Name</label>
+                  <input type="text" required value={entityName} onChange={(e) => setEntityName(e.target.value)} className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none" placeholder="e.g. 10xDS - Kochi" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] text-slate-400 font-black uppercase tracking-widest ml-1 block">Base Currency Code</label>
+                  <input type="text" required value={entityCurrency} onChange={(e) => setEntityCurrency(e.target.value.toUpperCase())} className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none" placeholder="e.g. INR, BHD, USD" maxLength={3} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] text-slate-400 font-black uppercase tracking-widest ml-1 block">Currency Symbol</label>
+                  <input type="text" value={entitySymbol} onChange={(e) => setEntitySymbol(e.target.value)} className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none" placeholder="e.g. ₹, $, BD" />
+                </div>
+                <div className="col-span-3 flex justify-end mt-4">
+                  <button type="submit" disabled={loading} className="bg-indigo-600 text-white px-10 py-3.5 rounded-full font-bold text-sm hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">
+                    {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Register Entity'}
                   </button>
                 </div>
               </form>

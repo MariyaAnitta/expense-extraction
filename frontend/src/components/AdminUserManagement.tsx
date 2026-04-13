@@ -12,8 +12,15 @@ interface UserData {
   email: string;
   role: string;
   team_id: string;
+  entity_id?: string;
   status: string;
   created_at: number;
+}
+
+interface Entity {
+  id: string;
+  name: string;
+  currency: string;
 }
 
 export default function AdminUserManagement() {
@@ -25,6 +32,8 @@ export default function AdminUserManagement() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('user');
   const [teamId, setTeamId] = useState('General');
+  const [entityId, setEntityId] = useState('default');
+  const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -35,6 +44,17 @@ export default function AdminUserManagement() {
       const usersData = snapshot.docs.map(doc => doc.data() as UserData);
       setUsers(usersData);
     });
+
+    const fetchEntities = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/entities`);
+        setEntities(res.data.entities || []);
+      } catch (err) {
+        console.error('Failed to fetch entities', err);
+      }
+    };
+    fetchEntities();
+
     return () => unsubscribe();
   }, []);
 
@@ -49,7 +69,8 @@ export default function AdminUserManagement() {
         email,
         password,
         role,
-        team_id: teamId
+        team_id: teamId,
+        entity_id: entityId
       });
       console.log('User created:', response.data);
       setSuccess(`Successfully created account for ${email}`);
@@ -136,6 +157,14 @@ export default function AdminUserManagement() {
                 </div>
 
                 <div className="space-y-2">
+                  <label className="text-[10px] text-slate-400 font-black uppercase tracking-widest ml-1 block">Assigned Entity</label>
+                  <select value={entityId} onChange={(e) => setEntityId(e.target.value)} className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none appearance-none">
+                    <option value="default" disabled>Select an Entity...</option>
+                    {entities.map(e => <option key={e.id} value={e.id}>{e.name} ({e.currency})</option>)}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
                   <label className="text-[10px] text-slate-400 font-black uppercase tracking-widest ml-1 block">Department / Team ID</label>
                   <input type="text" value={teamId} onChange={(e) => setTeamId(e.target.value)} className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none" placeholder="e.g. Marketing, IT, Ops" />
                 </div>
@@ -192,7 +221,10 @@ export default function AdminUserManagement() {
                       }`}>
                         {u.role}
                       </span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Team: {u.team_id}</span>
+                      <div className="flex items-center gap-2">
+                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Team: {u.team_id}</span>
+                         <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">[{entities.find(e => e.id === u.entity_id)?.name || 'Default'}]</span>
+                      </div>
                     </div>
                   </td>
                   <td className="px-8 py-5">

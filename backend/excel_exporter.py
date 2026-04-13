@@ -5,18 +5,26 @@ from datetime import datetime
 from models import ReceiptData, ExtractionResult
 from typing import List
 
-def generate_petty_cash_log(results: List[ExtractionResult], output_path: str):
+def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, currency: str = "BHD"):
     template_path = os.path.join(os.path.dirname(__file__), "petty_cash_template.xlsx")
     if os.path.exists(template_path):
         wb = openpyxl.load_workbook(template_path)
         ws = wb.active
+        
+        # V2 Step D: Programmatic Find & Replace BHD with target currency
+        # This scans the template and replaces static labels/headers without changing rows/columns
+        if currency.strip().upper() != "BHD":
+            for row in ws.iter_rows():
+                for cell in row:
+                    if cell.value and isinstance(cell.value, str) and "BHD" in cell.value:
+                        cell.value = cell.value.replace("BHD", currency.strip().upper())
     else:
-        # Fallback if template is missing but user is supposed to have uploaded it
+        # Fallback if template is missing
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Petty Cash Log"
 
-    bhd_format = '"BHD" #,##0.000'
+    currency_format = f'"{currency}" #,##0.000'
 
     # --- Date Sorting Logic ---
     def parse_date(date_str):
@@ -65,8 +73,8 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str):
     def safe_float(val):
         if val is None or val == "" or val == "null": return 0.0
         try:
-            # Handle cases where BHD strings might have commas or extra labels
-            s = str(val).replace('BHD', '').replace(',', '').strip()
+            # Handle cases where currency strings might have commas or extra labels
+            s = str(val).replace(currency, '').replace('BHD', '').replace(',', '').strip()
             return float(s)
         except: return 0.0
 

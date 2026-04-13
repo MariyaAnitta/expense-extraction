@@ -37,6 +37,7 @@ interface ReceiptData {
   bill_profile: string | null;
   category?: string;
   remarks: string;
+  sub_type?: string;
   confidence: number;
 }
 
@@ -97,6 +98,8 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [currentView, setCurrentView] = useState<'board' | 'admin' | 'team' | 'analytics'>('board');
   
+  const [userCurrency, setUserCurrency] = useState('BHD');
+  
   const handleViewUserDashboard = (uid: string, email: string, team_id?: string) => {
     setUserFilter(uid);
     setMemberEmail(email);
@@ -141,8 +144,19 @@ export default function App() {
           const docRef = doc(db, 'users', currentUser.uid);
           const docSnap = await getDoc(docRef);
           if (docSnap.exists() && docSnap.data().role) {
-            setUserRole(docSnap.data().role);
-            setUserData(docSnap.data());
+            const data = docSnap.data();
+            setUserRole(data.role);
+            setUserData(data);
+
+            // V2: Fetch entity currency if entity_id exists
+            if (data.entity_id && data.entity_id !== 'default') {
+               const entityRef = doc(db, 'entities', data.entity_id);
+               const entitySnap = await getDoc(entityRef);
+                 if (entitySnap.exists()) {
+                   const eData = entitySnap.data();
+                   setUserCurrency(eData.currency || 'BHD');
+                 }
+              }
           } else {
             setUserRole('user'); // Default fallback
             setUserData({ role: 'user', team_id: 'General' });
@@ -362,25 +376,27 @@ export default function App() {
   };
 
   const addManualEntry = () => {
-    setSelectedResult({
-      file_id: "draft-manual",
-      file_name: "Manual Entry",
-      status: "COMPLETED",
+    const newId = `manual-${Date.now()}`;
+    setQueue(prev => [{
+      file_id: newId,
+      file_name: `Manual Entry - ${new Date().toLocaleDateString()}`,
+      status: 'COMPLETED',
       data: {
         date: new Date().toISOString().split('T')[0],
-        description: "Opening balance B/F",
+        description: "Manual Entry",
         amount: null,
         deposit_amount: null,
-        currency: "BHD",
+        currency: userCurrency,
         received_by: "",
-        transaction_no: "MANUAL",
+        transaction_no: "",
         phone_number: null,
         bill_profile: null,
-        category: "Deposit",
+        category: "Expense",
         remarks: "ok",
+        sub_type: "",
         confidence: 100
       }
-    });
+    }, ...prev]);
   };
 
   const exportToExcel = async () => {
@@ -452,12 +468,15 @@ export default function App() {
   const handleConfirm = async () => {
     if (!selectedResult || !selectedResult.data) return;
     try {
-      if (selectedResult.file_id === "draft-manual") {
+      if (selectedResult.file_id === "draft-manual" || selectedResult.file_id.startsWith('manual-')) {
         // Explicitly set IDs to avoid null propagation
-        const uid = authUser?.uid || "unknown";
+        // V2 Fix: If Leader is on a member's dashboard, attribute to that member
+        const targetUserId = userFilter || authUser?.uid || "unknown";
         const tid = userData?.team_id || "General";
-        await axios.post(`${API_URL}/add-manual?user_id=${uid}&team_id=${tid}`, selectedResult.data);
-        setSelectedResult(null);
+        await axios.post(`${API_URL}/add-manual?user_id=${targetUserId}&team_id=${tid}&role=${userRole}`, selectedResult.data);
+        // If it was a local temporary entry, we keep it in the queue which will sync from DB
+        // If it was the specific "draft-manual" legacy object, clear it.
+        if (selectedResult.file_id === "draft-manual") setSelectedResult(null);
       } else {
         await axios.post(`${API_URL}/update-extraction/${selectedResult.file_id}?role=${userRole}`, selectedResult.data);
       }
@@ -590,8 +609,8 @@ export default function App() {
           ) : (
             <>
               <div className="grid grid-cols-3 gap-6">
-                <StatCard icon={TrendingUp} label="Total Expenses" value={totalAmount} subtext="BHD" trend="+12%" colorClass="text-rose-500" />
-                <StatCard icon={Plus} label="Total Deposits" value={totalDeposits} subtext="BHD" colorClass="text-emerald-500" />
+                <StatCard icon={TrendingUp} label="Total Expenses" value={totalAmount} subtext={userCurrency} trend="+12%" colorClass="text-rose-500" />
+                <StatCard icon={Plus} label="Total Deposits" value={totalDeposits} subtext={userCurrency} colorClass="text-emerald-500" />
                 <StatCard icon={ShieldCheck} label="Avg. Confidence" value={`${avgConfidence}%`} subtext="AI Score" colorClass="text-indigo-500" />
               </div>
 
@@ -785,12 +804,56 @@ export default function App() {
                                   }} 
                                 />
                                 {field.key === 'amount' && (
-                                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest pointer-events-none">BHD</span>
+                                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest pointer-events-none">{userCurrency}</span>
                                 )}
                               </div>
                             )}
                           </div>
                         ))}
+
+                        {/* V2: Dynamic Sub-Types */}
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase">
+                            {selectedResult.data?.category === 'Deposit' ? 'Deposit Method' : 'Detailed Expense Category'}
+                          </label>
+                          <div className="relative">
+                            <select 
+                              className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100 appearance-none"
+                              value={selectedResult.data?.sub_type || ''}
+                              onChange={e => {
+                                if (e.target.value === 'ADD_NEW') {
+                                  const custom = prompt("Enter custom category type:");
+                                  if (custom) handleDataChange('sub_type' as keyof ReceiptData, custom);
+                                } else {
+                                  handleDataChange('sub_type' as keyof ReceiptData, e.target.value);
+                                }
+                              }}
+                            >
+                              <option value="" disabled>Select Type...</option>
+                              {selectedResult.data?.category === 'Deposit' ? (
+                                <>
+                                  <option value="Cash">Cash</option>
+                                  <option value="Bank">Bank</option>
+                                </>
+                              ) : (
+                                <>
+                                  <option value="Food">Food</option>
+                                  <option value="Travel">Travel</option>
+                                  <option value="Visa">Visa</option>
+                                  <option value="Fuel">Fuel</option>
+                                  <option value="Stationery">Stationery</option>
+                                  <option value="Other">Other</option>
+                                </>
+                              )}
+                              {(userRole === 'admin' || userRole === 'leader') && (
+                                <option value="ADD_NEW" className="text-indigo-600 font-bold">+ Add Custom Type</option>
+                              )}
+                            </select>
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                              <Plus size={14} />
+                            </div>
+                          </div>
+                        </div>
                         <div className="pt-4 flex flex-col gap-3">
                           {selectedResult.image_url && (
                             <a href={selectedResult.image_url} target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-slate-100 rounded-xl font-bold text-xs flex items-center justify-center gap-2">

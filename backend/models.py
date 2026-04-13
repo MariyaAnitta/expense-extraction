@@ -13,8 +13,9 @@ class ReceiptData(BaseModel):
     phone_number: Optional[str] = Field(None, description="Phone number if applicable")
     bill_profile: Optional[str] = Field(None, description="Bill profile or account number")
     category: Optional[str] = Field("Expense", description="Type of transaction (Expense/Deposit)")
-    confidence: float = Field(0.0, description="AI confidence score 0-100")
     remarks: Optional[str] = Field("ok", description="Additional remarks")
+    sub_type: Optional[str] = Field("", description="Detailed Category sub-type")
+    confidence: float = Field(0.0, description="AI confidence score 0-100")
 
 class ExtractionResult(BaseModel):
     file_id: str

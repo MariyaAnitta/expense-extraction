@@ -115,11 +115,21 @@ async def run_batch_processor():
             continue
 
         try:
-            print(f"Processing {file_name}...")
-            db.collection("extractions").document(doc_id).update({"status": "PROCESSING"})
-            
+            # 0. V2: Fetch entity currency for AI Hint
+            hint_currency = "BHD"
+            uid = data.get("user_id")
+            if uid:
+                user_doc = db.collection("users").document(uid).get()
+                if user_doc.exists:
+                    u_data = user_doc.to_dict()
+                    ent_id = u_data.get("entity_id")
+                    if ent_id and ent_id != "default":
+                        ent_doc = db.collection("entities").document(ent_id).get()
+                        if ent_doc.exists:
+                            hint_currency = ent_doc.to_dict().get("currency", "BHD")
+
             # 1. Process the AI Extraction
-            result = processor.process_file(temp_path)
+            result = processor.process_file(temp_path, currency=hint_currency)
             
             # 2. Upload to Supabase for permanent viewing (if successful)
             image_url = None
@@ -403,7 +413,7 @@ async def update_extraction(doc_id: str, data: ReceiptData, role: str = "user"):
         return {"status": "error", "message": str(e)}
 
 @app.post("/add-manual")
-async def add_manual(data: Optional[ReceiptData] = None, user_id: Optional[str] = None, team_id: Optional[str] = None):
+async def add_manual(data: Optional[ReceiptData] = None, user_id: Optional[str] = None, team_id: Optional[str] = None, role: str = "user"):
     """Create a manual entry for accounting, either from default or from frontend draft."""
     try:
         if data:
@@ -428,12 +438,13 @@ async def add_manual(data: Optional[ReceiptData] = None, user_id: Optional[str] 
             "data": data_dict,
             "upload_time": time.time(),
             "local_path": None, # No file for manual entries
-            "is_verified": True,
-            "user_verified": True,
-            "leader_verified": True,
-            "user_id": user_id,
-            "team_id": team_id
-        })
+                "is_verified": True if (role == "admin" or role == "leader") else False,
+                "user_verified": True,
+                "leader_verified": True if (role == "admin" or role == "leader") else False,
+                "admin_verified": True if role == "admin" else False,
+                "user_id": user_id,
+                "team_id": team_id
+            })
         return {"status": "success", "id": doc_ref[1].id}
     except Exception as e:
         print(f"Error adding manual entry: {e}")
@@ -510,8 +521,20 @@ async def export_excel(team_id: Optional[str] = None, user_id: Optional[str] = N
         if not results:
             return {"error": "No completed extractions to export"}
             
+        # Determine target currency (V2)
+        target_currency = "BHD"
+        if user_id:
+            user_doc = db.collection("users").document(user_id).get()
+            if user_doc.exists:
+                u_data = user_doc.to_dict()
+                ent_id = u_data.get("entity_id")
+                if ent_id and ent_id != "default":
+                    ent_doc = db.collection("entities").document(ent_id).get()
+                    if ent_doc.exists:
+                        target_currency = ent_doc.to_dict().get("currency", "BHD")
+
         temp_excel = tempfile.mktemp(suffix=".xlsx")
-        generate_petty_cash_log(results, temp_excel)
+        generate_petty_cash_log(results, temp_excel, currency=target_currency)
         
         return FileResponse(
             temp_excel,
@@ -528,14 +551,50 @@ async def export_excel(team_id: Optional[str] = None, user_id: Optional[str] = N
 
 from pydantic import BaseModel
 
-class CreateUserRequest(BaseModel):
+class UserCreate(BaseModel):
     email: str
     password: str
     role: str
-    team_id: Optional[str] = None
+    team_id: Optional[str] = "general"
+    entity_id: Optional[str] = "default"
+
+class EntityCreate(BaseModel):
+    name: str
+    currency: str
+    symbol: Optional[str] = ""
+
+# --- ENTITY MANAGEMENT (V2) ---
+@app.get("/entities")
+async def get_entities():
+    try:
+        docs = db.collection("entities").stream()
+        entities = [{"id": d.id, **d.to_dict()} for d in docs]
+        return {"status": "success", "entities": entities}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/create-entity")
+async def create_entity(req: EntityCreate):
+    try:
+        # Check if entity already exists by name (case-insensitive)
+        entities = db.collection("entities").where("name", "==", req.name.strip()).stream()
+        if any(entities):
+            return JSONResponse(status_code=400, content={"error": "An entity with this name already exists"})
+
+        doc_ref = db.collection("entities").document()
+        doc_ref.set({
+            "name": req.name.strip(),
+            "currency": req.currency.strip().upper(),
+            "symbol": req.symbol.strip() if req.symbol else "",
+            "created_at": time.time()
+        })
+        return {"status": "success", "id": doc_ref.id, "message": "Entity created successfully"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 
 @app.post("/create-user")
-async def create_user(req: CreateUserRequest):
+async def create_user(req: UserCreate):
     try:
         from firebase_config import auth as admin_auth
         # Create user in Firebase Auth
@@ -551,6 +610,7 @@ async def create_user(req: CreateUserRequest):
             "email": req.email,
             "role": req.role,
             "team_id": clean_team,
+            "entity_id": req.entity_id.strip() if req.entity_id else "default",
             "created_at": time.time(),
             "status": "active"
         })

@@ -79,7 +79,7 @@ class ReceiptProcessor:
         msg = extract_msg.Message(file_path)
         return f"Subject: {msg.subject}\nFrom: {msg.sender}\nDate: {msg.date}\nBody: {msg.body}"
 
-    def _structure_data_vertex(self, raw_text: str, confidence: float = 95.0) -> ReceiptData:
+    def _structure_data_vertex(self, raw_text: str, confidence: float = 95.0, currency: str = "BHD") -> ReceiptData:
         """Use Gemini to structure the extracted text into ReceiptData"""
         prompt = f"""
         Extract the following information from the provided receipt/document text into a valid JSON object.
@@ -89,6 +89,7 @@ class ReceiptProcessor:
         2. If it's a Top-Up, Deposit, or Credit, put the value in 'deposit_amount'.
         3. For 'date', use YYYY-MM-DD format (CRITICAL for web compatibility).
         4. Be descriptive for 'description'.
+        5. Use {currency} as the default currency if not specified.
         
         *** SPECIAL RULE FOR PETTY CASH ***
         If the document is a "Transaction Receipt" or "External Transfer" where:
@@ -106,7 +107,7 @@ class ReceiptProcessor:
             "description": "Short summary of what was paid for",
             "amount": float or null,
             "deposit_amount": float or null,
-            "currency": "BHD",
+            "currency": "{currency}",
             "received_by": "Name of the entity or person",
             "transaction_no": "Reference string or null",
             "category": "Expense" or "Deposit",
@@ -159,7 +160,7 @@ class ReceiptProcessor:
             # Re-raise so the calling process_file method correctly marks it as FAILED
             raise
 
-    def process_file(self, file_path: str) -> ExtractionResult:
+    def process_file(self, file_path: str, currency: str = "BHD") -> ExtractionResult:
         """Complete pipeline: Pulse OCR -> Vertex AI Structure"""
         file_name = os.path.basename(file_path)
         file_id = file_name # Simplified ID
@@ -173,7 +174,7 @@ class ReceiptProcessor:
                 raw_text, confidence = self._extract_text_pulse(file_path)
             
             # 2. Structure (Vertex AI)
-            structured_data = self._structure_data_vertex(raw_text, confidence)
+            structured_data = self._structure_data_vertex(raw_text, confidence, currency=currency)
             
             return ExtractionResult(
                 file_id=file_id,
