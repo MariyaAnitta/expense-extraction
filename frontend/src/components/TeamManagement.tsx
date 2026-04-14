@@ -16,6 +16,16 @@ interface UserData {
   created_at: number;
 }
 
+const CURRENCY_PRESETS = [
+  { id: 'bhd', name: 'Bahrain', code: 'BHD', symbol: 'BD' },
+  { id: 'inr', name: 'India', code: 'INR', symbol: '₹' },
+  { id: 'usd', name: 'USA', code: 'USD', symbol: '$' },
+  { id: 'aed', name: 'UAE', code: 'AED', symbol: 'د.إ' },
+  { id: 'sar', name: 'Saudi Arabia', code: 'SAR', symbol: '﷼' },
+  { id: 'eur', name: 'Eurozone', code: 'EUR', symbol: '€' },
+  { id: 'gbp', name: 'United Kingdom', code: 'GBP', symbol: '£' },
+];
+
 interface TeamManagementProps {
   userRole: string | null;
   userTeam: string | null;
@@ -296,20 +306,38 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
               {error && <div className="mb-6 p-4 bg-rose-50 text-rose-600 rounded-xl text-sm font-bold border border-rose-100">{error}</div>}
               {success && <div className="mb-6 p-4 bg-emerald-50 text-emerald-600 rounded-xl text-sm font-bold border border-emerald-100 flex items-center gap-2"><CheckCircle2 size={18} /> {success}</div>}
 
-              <form onSubmit={handleCreateEntity} className="grid grid-cols-3 gap-6">
-                <div className="space-y-2">
+              <form onSubmit={handleCreateEntity} className="grid grid-cols-4 gap-6">
+                <div className="space-y-2 col-span-1">
+                  <label className="text-[10px] text-slate-400 font-black uppercase tracking-widest ml-1 block">Quick Setup (Country)</label>
+                  <select 
+                    onChange={(e) => {
+                      const preset = CURRENCY_PRESETS.find(p => p.id === e.target.value);
+                      if (preset) {
+                        setEntityCurrency(preset.code);
+                        setEntitySymbol(preset.symbol);
+                        if (!entityName) setEntityName(`10xDS - ${preset.name}`);
+                      }
+                    }}
+                    className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none appearance-none"
+                  >
+                    <option value="">Select Country...</option>
+                    {CURRENCY_PRESETS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+
+                <div className="space-y-2 col-span-1">
                   <label className="text-[10px] text-slate-400 font-black uppercase tracking-widest ml-1 block">Entity Name</label>
                   <input type="text" required value={entityName} onChange={(e) => setEntityName(e.target.value)} className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none" placeholder="e.g. 10xDS - Kochi" />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 col-span-1">
                   <label className="text-[10px] text-slate-400 font-black uppercase tracking-widest ml-1 block">Base Currency Code</label>
                   <input type="text" required value={entityCurrency} onChange={(e) => setEntityCurrency(e.target.value.toUpperCase())} className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none" placeholder="e.g. INR, BHD, USD" maxLength={3} />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 col-span-1">
                   <label className="text-[10px] text-slate-400 font-black uppercase tracking-widest ml-1 block">Currency Symbol</label>
                   <input type="text" value={entitySymbol} onChange={(e) => setEntitySymbol(e.target.value)} className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none" placeholder="e.g. ₹, $, BD" />
                 </div>
-                <div className="col-span-3 flex justify-end mt-4">
+                <div className="col-span-4 flex justify-end mt-4">
                   <button type="submit" disabled={loading} className="bg-indigo-600 text-white px-10 py-3.5 rounded-full font-bold text-sm hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">
                     {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Register Entity'}
                   </button>
