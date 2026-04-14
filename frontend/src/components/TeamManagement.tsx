@@ -16,25 +16,22 @@ interface UserData {
   created_at: number;
 }
 
-const CURRENCY_PRESETS = [
-  { id: 'bhd', name: 'Bahrain', code: 'BHD', symbol: 'BD' },
-  { id: 'inr', name: 'India', code: 'INR', symbol: '₹' },
-  { id: 'usd', name: 'USA', code: 'USD', symbol: '$' },
-  { id: 'aed', name: 'UAE', code: 'AED', symbol: 'د.إ' },
-  { id: 'sar', name: 'Saudi Arabia', code: 'SAR', symbol: '﷼' },
-  { id: 'eur', name: 'Eurozone', code: 'EUR', symbol: '€' },
-  { id: 'gbp', name: 'United Kingdom', code: 'GBP', symbol: '£' },
-];
-
 interface TeamManagementProps {
   userRole: string | null;
   userTeam: string | null;
   onViewDashboard: (uid: string, email: string, team_id: string) => void;
 }
 
+interface CountryData {
+  name: string;
+  code: string;
+  symbol: string;
+}
+
 export default function TeamManagement({ userRole, userTeam, onViewDashboard }: TeamManagementProps) {
   const [users, setUsers] = useState<UserData[]>([]);
   const [entities, setEntities] = useState<any[]>([]);
+  const [countries, setCountries] = useState<CountryData[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showEntityForm, setShowEntityForm] = useState(false);
   
@@ -49,6 +46,7 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
   const [entityName, setEntityName] = useState('');
   const [entityCurrency, setEntityCurrency] = useState('BHD');
   const [entitySymbol, setEntitySymbol] = useState('');
+  const [editingEntityId, setEditingEntityId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -61,6 +59,23 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
     if (userRole === 'admin') {
       q = query(baseCol, orderBy('created_at', 'desc'));
       axios.get(`${API_URL}/entities`).then(res => setEntities(res.data.entities || [])).catch(console.error);
+      
+      // Fetch countries from REST Countries API
+      axios.get('https://restcountries.com/v3.1/all?fields=name,currencies')
+        .then(res => {
+          const formatted: CountryData[] = res.data.map((c: any) => {
+            const currencyCode = Object.keys(c.currencies || {})[0];
+            const currency = c.currencies?.[currencyCode];
+            return {
+              name: c.name.common,
+              code: currencyCode || '???',
+              symbol: currency?.symbol || currencyCode || '?'
+            };
+          }).filter((c: any) => c.code !== '???').sort((a: any, b: any) => a.name.localeCompare(b.name));
+          
+          setCountries(formatted);
+        })
+        .catch(err => console.error("Failed to fetch countries", err));
     } else {
       // Simplest query for reliability — fetch all and filter in JS
       q = query(baseCol);
@@ -121,26 +136,54 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
     setLoading(true);
     setError('');
     setSuccess('');
-    
     try {
-      await axios.post(`${API_URL}/create-entity`, {
-        name: entityName,
-        currency: entityCurrency,
-        symbol: entitySymbol
-      });
-      setSuccess(`Successfully created entity: ${entityName}`);
+      if (editingEntityId) {
+        await axios.patch(`${API_URL}/update-entity/${editingEntityId}`, {
+          name: entityName,
+          currency: entityCurrency,
+          symbol: entitySymbol
+        });
+        setSuccess(`Successfully updated entity: ${entityName}`);
+      } else {
+        const response = await axios.post(`${API_URL}/create-entity`, {
+          name: entityName,
+          currency: entityCurrency,
+          symbol: entitySymbol
+        });
+        setSuccess(`Successfully created entity: ${entityName}`);
+      }
+      
       setEntityName('');
       setEntityCurrency('BHD');
       setEntitySymbol('');
-      // Refresh entities list
+      setEditingEntityId(null);
+      // Refresh list
       const res = await axios.get(`${API_URL}/entities`);
       setEntities(res.data.entities || []);
-      setTimeout(() => setShowEntityForm(false), 2000);
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Failed to create entity');
+      setError(err.response?.data?.message || 'Action failed');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDeleteEntity = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to remove the entity "${name}"? This might affect users assigned to it.`)) return;
+    try {
+      await axios.delete(`${API_URL}/delete-entity/${id}`);
+      setEntities(prev => prev.filter(e => e.id !== id));
+    } catch (err) {
+      console.error('Failed to delete entity', err);
+    }
+  };
+
+  const handleEditEntity = (entity: any) => {
+    setEditingEntityId(entity.id);
+    setEntityName(entity.name);
+    setEntityCurrency(entity.currency);
+    setEntitySymbol(entity.symbol);
+    // Scroll to form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -155,9 +198,6 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
           </p>
         </div>
         
-        {/* Only Admin can invite new members per user's earlier requirement, or keep it for leader if needed? 
-            The user said "Only you (Admin) can see the Invite Member button" but then asked "how the leader can have a page to see his team".
-            I will show the button to Admin only. */}
         {userRole === 'admin' && (
           <div className="flex items-center gap-4">
             <button 
@@ -311,17 +351,25 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
                   <label className="text-[10px] text-slate-400 font-black uppercase tracking-widest ml-1 block">Quick Setup (Country)</label>
                   <select 
                     onChange={(e) => {
-                      const preset = CURRENCY_PRESETS.find(p => p.id === e.target.value);
-                      if (preset) {
-                        setEntityCurrency(preset.code);
-                        setEntitySymbol(preset.symbol);
-                        if (!entityName) setEntityName(`10xDS - ${preset.name}`);
+                      const country = countries.find(c => c.name === e.target.value);
+                      if (country) {
+                        setEntityCurrency(country.code);
+                        setEntitySymbol(country.symbol);
+                        if (!entityName) setEntityName(`10xDS - ${country.name}`);
                       }
                     }}
                     className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none appearance-none"
                   >
                     <option value="">Select Country...</option>
-                    {CURRENCY_PRESETS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    <optgroup label="Common">
+                      <option value="Bahrain">Bahrain</option>
+                      <option value="India">India</option>
+                      <option value="United Arab Emirates">UAE</option>
+                      <option value="United States">USA</option>
+                    </optgroup>
+                    <optgroup label="All Countries">
+                       {countries.map(c => <option key={`${c.name}-${c.code}`} value={c.name}>{c.name}</option>)}
+                    </optgroup>
                   </select>
                 </div>
 
@@ -337,13 +385,51 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
                   <label className="text-[10px] text-slate-400 font-black uppercase tracking-widest ml-1 block">Currency Symbol</label>
                   <input type="text" value={entitySymbol} onChange={(e) => setEntitySymbol(e.target.value)} className="w-full bg-slate-50 border border-transparent rounded-2xl py-3.5 px-4 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none" placeholder="e.g. ₹, $, BD" />
                 </div>
-                <div className="col-span-4 flex justify-end mt-4">
-                  <button type="submit" disabled={loading} className="bg-indigo-600 text-white px-10 py-3.5 rounded-full font-bold text-sm hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">
-                    {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Register Entity'}
-                  </button>
-                </div>
-              </form>
-            </div>
+                <div className="col-span-4 flex justify-end mt-4 gap-3">
+                   {editingEntityId && (
+                     <button type="button" onClick={() => {
+                       setEditingEntityId(null);
+                       setEntityName('');
+                       setEntityCurrency('BHD');
+                       setEntitySymbol('');
+                     }} className="bg-slate-100 text-slate-600 px-6 py-3.5 rounded-full font-bold text-sm hover:bg-slate-200">
+                       Cancel Edit
+                     </button>
+                   )}
+                   <button type="submit" disabled={loading} className="bg-indigo-600 text-white px-10 py-3.5 rounded-full font-bold text-sm hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2">
+                     {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : (editingEntityId ? 'Update Entity' : 'Register Entity')}
+                   </button>
+                 </div>
+               </form>
+
+               {/* Entities List */}
+               <div className="mt-10 border-t border-slate-100 pt-8">
+                  <h4 className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-4">Active Directories ({entities.length})</h4>
+                  <div className="grid grid-cols-1 gap-3">
+                    {entities.map(ent => (
+                      <div key={ent.id} className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 hover:border-indigo-100 transition-colors group">
+                        <div className="flex items-center gap-4">
+                           <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-indigo-500 font-bold shadow-sm border border-slate-100">
+                              {ent.symbol || ent.currency}
+                           </div>
+                           <div>
+                              <p className="font-bold text-slate-800 text-sm">{ent.name}</p>
+                              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Context: {ent.currency} Gateway</p>
+                           </div>
+                        </div>
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                           <button onClick={() => handleEditEntity(ent)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                              <LayoutDashboard size={16} />
+                           </button>
+                           <button onClick={() => handleDeleteEntity(ent.id, ent.name)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
+                              <Trash2 size={16} />
+                           </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+               </div>
+             </div>
           </motion.div>
         )}
       </AnimatePresence>
