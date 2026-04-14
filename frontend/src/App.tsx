@@ -499,9 +499,11 @@ export default function App() {
       if (value === 'Deposit') {
         newData.amount = null;
         newData.deposit_amount = currentAmount;
+        newData.sub_type = ""; // Reset sub-type to force fresh selection
       } else {
         newData.amount = currentAmount;
         newData.deposit_amount = null;
+        newData.sub_type = ""; // Reset sub-type to force fresh selection
       }
     }
     
@@ -509,7 +511,15 @@ export default function App() {
     
     // V2: If it's a manual entry, update the file_name to reflect the new date
     if (selectedResult.file_id.includes('manual')) {
-      const displayDate = newData.date ? new Date(newData.date).toLocaleDateString() : 'Pending Date';
+      let displayDate = 'Pending Date';
+      try {
+        if (newData.date) {
+          const d = new Date(newData.date);
+          if (!isNaN(d.getTime())) {
+            displayDate = d.toLocaleDateString();
+          }
+        }
+      } catch (e) {}
       updatedResult.file_name = `Manual Entry - ${displayDate}`;
     }
 
@@ -802,9 +812,10 @@ export default function App() {
                           
                           return (
                             <div key={field.key} className="space-y-1">
-                              <label className="text-[10px] font-black text-slate-400 uppercase">{field.label}</label>
+                              <label htmlFor={`field-${field.key}`} className="text-[10px] font-black text-slate-400 uppercase">{field.label}</label>
                               {field.type === 'textarea' ? (
                                 <textarea 
+                                  id={`field-${field.key}`}
                                   readOnly={isLocked}
                                   className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100 disabled:opacity-60" 
                                   rows={2} 
@@ -813,6 +824,7 @@ export default function App() {
                                 />
                               ) : field.type === 'select' ? (
                                 <select 
+                                  id={`field-${field.key}`}
                                   disabled={isLocked}
                                   className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100 disabled:opacity-60" 
                                   value={selectedResult.data?.[field.key as keyof ReceiptData] || 'Expense'} 
@@ -823,6 +835,7 @@ export default function App() {
                               ) : (
                                 <div className="relative">
                                   <input 
+                                    id={`field-${field.key}`}
                                     type={field.type === 'number' ? 'text' : field.type} 
                                     readOnly={isLocked}
                                     inputMode={field.type === 'number' ? 'decimal' : undefined}
@@ -849,15 +862,20 @@ export default function App() {
                         })}
 
                         {/* V2: Dynamic Sub-Types (Hidden for Opening Balance) */}
-                        {!(selectedResult.data?.description?.toLowerCase().includes('opening balance')) && (
+                        {!(selectedResult.data?.description?.trim().toLowerCase().includes('opening balance')) && (
                           <div className="space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase">
-                              {selectedResult.data?.category === 'Deposit' ? 'Deposit Method' : 'Detailed Expense Category'}
+                            <label htmlFor="field-subtype" className="text-[10px] font-black text-slate-400 uppercase flex items-center justify-between">
+                              <span>{selectedResult.data?.category === 'Deposit' ? 'Deposit Method' : 'Detailed Expense Category'}</span>
+                              <span className="text-rose-500">* Required</span>
                             </label>
                             <div className="relative">
                               <select 
+                                id="field-subtype"
                                 disabled={selectedResult.is_verified}
-                                className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100 appearance-none disabled:opacity-60"
+                                className={cn(
+                                  "w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100 appearance-none disabled:opacity-60",
+                                  !selectedResult.data?.sub_type && "border-2 border-rose-100 bg-rose-50/10"
+                                )}
                                 value={selectedResult.data?.sub_type || ''}
                                 onChange={e => {
                                   if (e.target.value === 'ADD_NEW') {
