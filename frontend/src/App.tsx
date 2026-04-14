@@ -383,7 +383,7 @@ export default function App() {
       status: 'COMPLETED',
       data: {
         date: new Date().toISOString().split('T')[0],
-        description: "Manual Entry",
+        description: "Opening balance B/F",
         amount: null,
         deposit_amount: null,
         currency: userCurrency,
@@ -391,9 +391,9 @@ export default function App() {
         transaction_no: "",
         phone_number: null,
         bill_profile: null,
-        category: "Expense",
+        category: "Deposit",
         remarks: "ok",
-        sub_type: "",
+        sub_type: "Opening Balance",
         confidence: 100
       }
     }, ...prev]);
@@ -769,91 +769,110 @@ export default function App() {
                       </div>
                     ) : (
                       <div className="space-y-6">
+                        {/* Fields List */}
                         {[
                           { label: 'Date', key: 'date', type: 'date' },
                           { label: 'Type', key: 'category', type: 'select', options: ['Expense', 'Deposit'] },
                           { label: 'Description', key: 'description', type: 'textarea' },
                           { label: 'Amount', key: 'amount', type: 'number' },
                           { label: 'Remarks', key: 'remarks', type: 'text' }
-                        ].map(field => (
-                          <div key={field.key} className="space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase">{field.label}</label>
-                            {field.type === 'textarea' ? (
-                              <textarea className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100" rows={2} value={selectedResult.data?.[field.key as keyof ReceiptData] || ''} onChange={e => handleDataChange(field.key as keyof ReceiptData, e.target.value)} />
-                            ) : field.type === 'select' ? (
-                              <select className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100" value={selectedResult.data?.[field.key as keyof ReceiptData] || 'Expense'} onChange={e => handleDataChange(field.key as keyof ReceiptData, e.target.value)}>
-                                {field.options?.map(o => <option key={o} value={o}>{o}</option>)}
-                              </select>
-                            ) : (
-                              <div className="relative">
-                                <input 
-                                  type={field.type === 'number' ? 'text' : field.type} 
-                                  inputMode={field.type === 'number' ? 'decimal' : undefined}
-                                  className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100" 
-                                  value={
-                                    field.key === 'amount' 
-                                      ? (selectedResult.data?.amount ?? selectedResult.data?.deposit_amount ?? '') 
-                                      : (selectedResult.data?.[field.key as keyof ReceiptData] ?? '')
-                                  } 
-                                  onChange={e => {
-                                    // Map "Amount" field to the correct internal key based on category
-                                    const actualKey = (field.key === 'amount' && selectedResult.data?.category === 'Deposit') 
-                                      ? 'deposit_amount' 
-                                      : (field.key as keyof ReceiptData);
-                                    handleDataChange(actualKey, e.target.value);
-                                  }} 
+                        ].map(field => {
+                          const isLocked = (userRole === 'admin' || userRole === 'leader') ? selectedResult.is_verified : selectedResult.user_verified;
+                          
+                          return (
+                            <div key={field.key} className="space-y-1">
+                              <label className="text-[10px] font-black text-slate-400 uppercase">{field.label}</label>
+                              {field.type === 'textarea' ? (
+                                <textarea 
+                                  readOnly={isLocked}
+                                  className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100 disabled:opacity-60" 
+                                  rows={2} 
+                                  value={selectedResult.data?.[field.key as keyof ReceiptData] || ''} 
+                                  onChange={e => handleDataChange(field.key as keyof ReceiptData, e.target.value)} 
                                 />
-                                {field.key === 'amount' && (
-                                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest pointer-events-none">{userCurrency}</span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-
-                        {/* V2: Dynamic Sub-Types */}
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase">
-                            {selectedResult.data?.category === 'Deposit' ? 'Deposit Method' : 'Detailed Expense Category'}
-                          </label>
-                          <div className="relative">
-                            <select 
-                              className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100 appearance-none"
-                              value={selectedResult.data?.sub_type || ''}
-                              onChange={e => {
-                                if (e.target.value === 'ADD_NEW') {
-                                  const custom = prompt("Enter custom category type:");
-                                  if (custom) handleDataChange('sub_type' as keyof ReceiptData, custom);
-                                } else {
-                                  handleDataChange('sub_type' as keyof ReceiptData, e.target.value);
-                                }
-                              }}
-                            >
-                              <option value="" disabled>Select Type...</option>
-                              {selectedResult.data?.category === 'Deposit' ? (
-                                <>
-                                  <option value="Cash">Cash</option>
-                                  <option value="Bank">Bank</option>
-                                </>
+                              ) : field.type === 'select' ? (
+                                <select 
+                                  disabled={isLocked}
+                                  className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100 disabled:opacity-60" 
+                                  value={selectedResult.data?.[field.key as keyof ReceiptData] || 'Expense'} 
+                                  onChange={e => handleDataChange(field.key as keyof ReceiptData, e.target.value)}
+                                >
+                                  {field.options?.map(o => <option key={o} value={o}>{o}</option>)}
+                                </select>
                               ) : (
-                                <>
-                                  <option value="Food">Food</option>
-                                  <option value="Travel">Travel</option>
-                                  <option value="Visa">Visa</option>
-                                  <option value="Fuel">Fuel</option>
-                                  <option value="Stationery">Stationery</option>
-                                  <option value="Other">Other</option>
-                                </>
+                                <div className="relative">
+                                  <input 
+                                    type={field.type === 'number' ? 'text' : field.type} 
+                                    readOnly={isLocked}
+                                    inputMode={field.type === 'number' ? 'decimal' : undefined}
+                                    className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100 disabled:opacity-60" 
+                                    value={
+                                      field.key === 'amount' 
+                                        ? (selectedResult.data?.amount ?? selectedResult.data?.deposit_amount ?? '') 
+                                        : (selectedResult.data?.[field.key as keyof ReceiptData] ?? '')
+                                    } 
+                                    onChange={e => {
+                                      const actualKey = (field.key === 'amount' && selectedResult.data?.category === 'Deposit') 
+                                        ? 'deposit_amount' 
+                                        : (field.key as keyof ReceiptData);
+                                      handleDataChange(actualKey, e.target.value);
+                                    }} 
+                                  />
+                                  {field.key === 'amount' && (
+                                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest pointer-events-none">{userCurrency}</span>
+                                  )}
+                                </div>
                               )}
-                              {(userRole === 'admin' || userRole === 'leader') && (
-                                <option value="ADD_NEW" className="text-indigo-600 font-bold">+ Add Custom Type</option>
-                              )}
-                            </select>
-                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                              <Plus size={14} />
+                            </div>
+                          );
+                        })}
+
+                        {/* V2: Dynamic Sub-Types (Hidden for Opening Balance) */}
+                        {!(selectedResult.data?.description?.toLowerCase().includes('opening balance')) && (
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 uppercase">
+                              {selectedResult.data?.category === 'Deposit' ? 'Deposit Method' : 'Detailed Expense Category'}
+                            </label>
+                            <div className="relative">
+                              <select 
+                                disabled={(userRole === 'admin' || userRole === 'leader') ? selectedResult.is_verified : selectedResult.user_verified}
+                                className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100 appearance-none disabled:opacity-60"
+                                value={selectedResult.data?.sub_type || ''}
+                                onChange={e => {
+                                  if (e.target.value === 'ADD_NEW') {
+                                    const custom = prompt("Enter custom category type:");
+                                    if (custom) handleDataChange('sub_type' as keyof ReceiptData, custom);
+                                  } else {
+                                    handleDataChange('sub_type' as keyof ReceiptData, e.target.value);
+                                  }
+                                }}
+                              >
+                                <option value="" disabled>Select Type...</option>
+                                {selectedResult.data?.category === 'Deposit' ? (
+                                  <>
+                                    <option value="Cash">Cash</option>
+                                    <option value="Bank">Bank</option>
+                                  </>
+                                ) : (
+                                  <>
+                                    <option value="Food">Food</option>
+                                    <option value="Travel">Travel</option>
+                                    <option value="Visa">Visa</option>
+                                    <option value="Fuel">Fuel</option>
+                                    <option value="Stationery">Stationery</option>
+                                    <option value="Other">Other</option>
+                                  </>
+                                )}
+                                {(userRole === 'admin' || userRole === 'leader') && (
+                                  <option value="ADD_NEW" className="text-indigo-600 font-bold">+ Add Custom Type</option>
+                                )}
+                              </select>
+                              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                <Plus size={14} />
+                              </div>
                             </div>
                           </div>
-                        </div>
+                        )}
                         <div className="pt-4 flex flex-col gap-3">
                           {selectedResult.image_url && (
                             <a href={selectedResult.image_url} target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-slate-100 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
