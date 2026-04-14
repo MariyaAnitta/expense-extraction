@@ -145,7 +145,7 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
         });
         setSuccess(`Successfully updated entity: ${entityName}`);
       } else {
-        const response = await axios.post(`${API_URL}/create-entity`, {
+        await axios.post(`${API_URL}/create-entity`, {
           name: entityName,
           currency: entityCurrency,
           symbol: entitySymbol
