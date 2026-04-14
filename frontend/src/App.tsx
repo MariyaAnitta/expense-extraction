@@ -505,7 +505,20 @@ export default function App() {
       }
     }
     
-    setSelectedResult({ ...selectedResult, data: newData });
+    const updatedResult = { ...selectedResult, data: newData };
+    
+    // V2: If it's a manual entry, update the file_name to reflect the new date
+    if (selectedResult.file_id.includes('manual')) {
+      const displayDate = newData.date ? new Date(newData.date).toLocaleDateString() : 'Pending Date';
+      updatedResult.file_name = `Manual Entry - ${displayDate}`;
+    }
+
+    setSelectedResult(updatedResult);
+
+    // Sync back to queue for immediate UI updates in the list
+    setQueue(prev => prev.map(item => 
+      item.file_id === selectedResult.file_id ? updatedResult : item
+    ));
   };
 
   if (authLoading) {
@@ -783,7 +796,9 @@ export default function App() {
                           { label: 'Amount', key: 'amount', type: 'number' },
                           { label: 'Remarks', key: 'remarks', type: 'text' }
                         ].map(field => {
-                          const isLocked = (userRole === 'admin' || userRole === 'leader') ? selectedResult.is_verified : selectedResult.user_verified;
+                          // REFINED LOCKING: Users can edit until the Leader (is_verified) confirms it.
+                          // Leaders/Admins can edit until THEY confirm it (is_verified).
+                          const isLocked = selectedResult.is_verified; 
                           
                           return (
                             <div key={field.key} className="space-y-1">
@@ -841,7 +856,7 @@ export default function App() {
                             </label>
                             <div className="relative">
                               <select 
-                                disabled={(userRole === 'admin' || userRole === 'leader') ? selectedResult.is_verified : selectedResult.user_verified}
+                                disabled={selectedResult.is_verified}
                                 className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100 appearance-none disabled:opacity-60"
                                 value={selectedResult.data?.sub_type || ''}
                                 onChange={e => {
@@ -887,14 +902,14 @@ export default function App() {
                           )}
                           <button 
                             onClick={handleConfirm}
-                            disabled={(userRole === 'admin' || userRole === 'leader') ? selectedResult?.is_verified : selectedResult?.user_verified}
+                            disabled={selectedResult?.is_verified}
                             className={cn(
                               "w-full py-4 rounded-xl font-black text-xs shadow-lg transition-all",
-                              ((userRole === 'admin' || userRole === 'leader') ? selectedResult?.is_verified : selectedResult?.user_verified)
+                              selectedResult?.is_verified
                                 ? "bg-emerald-500 text-white" : "bg-slate-900 text-white hover:bg-black"
                             )}
                           >
-                            {((userRole === 'admin' || userRole === 'leader') ? selectedResult?.is_verified : selectedResult?.user_verified) ? 'VERIFIED' : ((userRole === 'admin' || userRole === 'leader') ? 'APPROVE & VERIFY' : 'CONFIRM DETAILS')}
+                            {selectedResult?.is_verified ? 'VERIFIED' : ((userRole === 'admin' || userRole === 'leader') ? 'APPROVE & VERIFY' : 'CONFIRM DETAILS')}
                           </button>
                         </div>
                       </div>
