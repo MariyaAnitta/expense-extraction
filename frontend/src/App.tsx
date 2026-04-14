@@ -52,6 +52,8 @@ interface ExtractionResult {
   leader_verified?: boolean;
   admin_verified?: boolean;
   image_url?: string;
+  user_id?: string;
+  team_id?: string;
 }
 
 // --- Components ---
@@ -738,9 +740,13 @@ export default function App() {
                                   ) : "—"}
                                 </td>
                                 <td className="px-8 py-4 text-right">
-                                  <button onClick={(e) => deleteExtraction(e, item.file_id)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg">
-                                    <Trash2 size={16} />
-                                  </button>
+                                  {(userRole === 'admin' || 
+                                    (userRole === 'leader' && !userFilter) || 
+                                    item.user_id === authUser.uid) && (
+                                    <button onClick={(e) => deleteExtraction(e, item.file_id)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors">
+                                      <Trash2 size={16} />
+                                    </button>
+                                  )}
                                 </td>
                               </tr>
                             ))
