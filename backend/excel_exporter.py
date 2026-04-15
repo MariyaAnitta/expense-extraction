@@ -24,30 +24,6 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
                     # Use currency code directly without extra quotes to avoid visual noise
                     if cell.number_format and "BHD" in cell.number_format:
                         cell.number_format = cell.number_format.replace("BHD", target_curr)
-
-            # V3: Insert Categorical Columns (Deposit Category & Expense Category)
-            ws.insert_cols(3, 2)
-            
-            # Set Headers
-            ws.cell(row=4, column=3, value="Deposit Category")
-            ws.cell(row=4, column=4, value="Expense Category")
-            
-            # Apply Style from Description Column (Col 2)
-            header_font = ws.cell(row=4, column=2).font
-            header_fill = ws.cell(row=4, column=2).fill
-            header_align = ws.cell(row=4, column=2).alignment
-            header_border = ws.cell(row=4, column=2).border
-            
-            for col in [3, 4]:
-                c = ws.cell(row=4, column=col)
-                if header_font: c.font = Font(name=header_font.name, size=header_font.size, bold=header_font.bold, color=header_font.color)
-                if header_fill: c.fill = PatternFill(start_color=header_fill.start_color, end_color=header_fill.end_color, fill_type=header_fill.fill_type)
-                if header_align: c.alignment = Alignment(horizontal=header_align.horizontal, vertical=header_align.vertical)
-                if header_border: c.border = Border(left=header_border.left, right=header_border.right, top=header_border.top, bottom=header_border.bottom)
-            
-            # Set reasonable widths
-            ws.column_dimensions['C'].width = 20
-            ws.column_dimensions['D'].width = 20
     else:
         # Fallback if template is missing
         wb = openpyxl.Workbook()
