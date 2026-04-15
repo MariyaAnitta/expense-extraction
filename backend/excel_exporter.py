@@ -13,13 +13,21 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
         
         # V2 Step D: Programmatic Find & Replace BHD with target currency
         if currency.strip().upper() != "BHD":
+            target_curr = currency.strip().upper()
             for row in ws.iter_rows():
                 for cell in row:
+                    # 1. Surgical string replacement in cell values (headers/titles)
                     if cell.value and isinstance(cell.value, str) and "BHD" in cell.value:
-                        cell.value = cell.value.replace("BHD", currency.strip().upper())
-                    # Also replace BHD in number formats just in case
+                        cell.value = cell.value.replace("BHD", target_curr)
+                    
+                    # 2. Surgical number_format replacement (Corruption fix)
+                    # We wrap the currency in quotes to ensure Excel treats it as literal text
                     if cell.number_format and "BHD" in cell.number_format:
-                        cell.number_format = cell.number_format.replace("BHD", currency.strip().upper())
+                        # Find out if BHD was already quoted in the format
+                        if f'"{target_curr}"' not in cell.number_format:
+                            cell.number_format = cell.number_format.replace("BHD", f'"{target_curr}"')
+                        else:
+                            cell.number_format = cell.number_format.replace("BHD", target_curr)
     else:
         # Fallback if template is missing
         wb = openpyxl.Workbook()
@@ -107,24 +115,37 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
             running_balance = running_balance + dep - exp
             
             # VALUES ONLY — Let the template handle alignment/styling
-            if d.date: 
-                ws.cell(row=row_idx, column=1, value=str(d.date))
+            # DATE: Use native datetime for Excel to recognize it as a date
+            if d.date:
+                try:
+                    dt = parse_date(d.date)
+                    if dt != datetime.max:
+                        c_date = ws.cell(row=row_idx, column=1, value=dt)
+                        c_date.number_format = 'yyyy-mm-dd' # Match user's prefered display in image
+                    else:
+                        ws.cell(row=row_idx, column=1, value=str(d.date))
+                except:
+                    ws.cell(row=row_idx, column=1, value=str(d.date))
             
             desc = d.description or d.category or "Expense"
             ws.cell(row=row_idx, column=2, value=str(desc))
             
             if dep != 0: 
                 c = ws.cell(row=row_idx, column=3, value=dep)
-                c.number_format = currency_format
+                # Apply format only if not already set or specifically needed
+                if "0.000" not in (c.number_format or ""):
+                    c.number_format = f'"{currency}" #,##0.000'
             if exp != 0: 
                 c = ws.cell(row=row_idx, column=4, value=exp)
-                c.number_format = currency_format
+                if "0.000" not in (c.number_format or ""):
+                    c.number_format = f'"{currency}" #,##0.000'
             
             rb = d.received_by or ""
             ws.cell(row=row_idx, column=5, value=str(rb))
             
             c_bal = ws.cell(row=row_idx, column=6, value=running_balance)
-            c_bal.number_format = currency_format
+            if "0.000" not in (c_bal.number_format or ""):
+                c_bal.number_format = f'"{currency}" #,##0.000'
             ws.cell(row=row_idx, column=7, value=str(d.remarks or "ok"))
             
             row_idx += 1

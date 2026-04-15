@@ -884,13 +884,15 @@ export default function App() {
                                     if (custom && custom.trim()) {
                                       try {
                                         const type = selectedResult.data?.category || 'Expense';
+                                        const teamId = userRole === 'admin' ? 'global' : (userData?.team_id || 'General');
                                         await axios.post(`${API_URL}/categories`, {
                                           name: custom.trim(),
                                           type: type,
-                                          is_builtin: false
+                                          is_builtin: false,
+                                          team_id: teamId
                                         });
                                         // Refresh local list
-                                        const res = await axios.get(`${API_URL}/categories`);
+                                        const res = await axios.get(`${API_URL}/categories`, { params: { team_id: teamId } });
                                         if (res.data.status === 'success') setDbCategories(res.data.categories);
                                         handleDataChange('sub_type' as keyof ReceiptData, custom.trim());
                                       } catch (err: any) {
@@ -948,19 +950,22 @@ export default function App() {
                                 return (
                                   <button 
                                     onClick={async () => {
-                                      if (!confirm(`Delete category "${selectedCat.name}" permanently for everyone?`)) return;
+                                      if (!confirm(`Delete category "${selectedCat.name}" permanently for everyone in your team?`)) return;
                                       try {
-                                        await axios.delete(`${API_URL}/categories/${selectedCat.id}`);
-                                        const res = await axios.get(`${API_URL}/categories`);
+                                        const tid = userData?.team_id || "General";
+                                        await axios.delete(`${API_URL}/categories/${selectedCat.id}`, {
+                                          params: { role: userRole, team_id: tid }
+                                        });
+                                        const res = await axios.get(`${API_URL}/categories`, { params: { team_id: tid } });
                                         if (res.data.status === 'success') setDbCategories(res.data.categories);
                                         handleDataChange('sub_type' as keyof ReceiptData, '');
                                       } catch (err: any) {
                                         alert(err.response?.data?.error || "Failed to delete category");
                                       }
                                     }}
-                                    className="text-[10px] font-black text-rose-500 hover:text-rose-600 uppercase tracking-widest flex items-center gap-1 mt-1 ml-1"
+                                    className="text-[10px] font-medium text-slate-400 hover:text-rose-500 uppercase tracking-widest flex items-center gap-1 mt-1 ml-1 transition-colors"
                                   >
-                                    <Trash2 size={10} /> Delete Global Category
+                                    <X size={10} /> Remove Category
                                   </button>
                                 );
                               }

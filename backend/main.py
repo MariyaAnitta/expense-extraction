@@ -128,10 +128,12 @@ async def run_batch_processor():
                         if ent_doc.exists:
                             hint_currency = ent_doc.to_dict().get("currency", "BHD")
 
-            # 0.5 V3: Fetch Dynamic Categories for AI Taxonomy
+            # 0.5 V3: Fetch Dynamic Categories for AI Taxonomy (Scoping by Team)
             dynamic_cats = []
             try:
-                cat_docs = db.collection("categories").stream()
+                team_id = data.get("team_id", "General")
+                # Query global OR specific team categories
+                cat_docs = db.collection("categories").where("team_id", "in", ["global", team_id]).stream()
                 dynamic_cats = [c.to_dict().get("name") for c in cat_docs if c.to_dict().get("name")]
             except Exception as cat_err:
                 print(f"Warning: Failed to fetch dynamic categories: {cat_err}")
@@ -577,6 +579,7 @@ class CategoryCreate(BaseModel):
     name: str
     type: str # Expense or Deposit
     is_builtin: bool = False
+    team_id: str = "global"
 
 # --- ENTITY MANAGEMENT (V2) ---
 @app.get("/entities")
@@ -639,9 +642,13 @@ async def create_user(req: UserCreate):
 
 # --- CATEGORY MANAGEMENT (V3) ---
 @app.get("/categories")
-async def get_categories():
+async def get_categories(team_id: Optional[str] = None):
     try:
-        docs = db.collection("categories").stream()
+        if team_id:
+            docs = db.collection("categories").where("team_id", "in", ["global", team_id]).stream()
+        else:
+            docs = db.collection("categories").where("team_id", "==", "global").stream()
+        
         categories = [{"id": d.id, **d.to_dict()} for d in docs]
         return {"status": "success", "categories": categories}
     except Exception as e:
@@ -650,16 +657,17 @@ async def get_categories():
 @app.post("/categories")
 async def add_category(req: CategoryCreate):
     try:
-        # Check if already exists
-        doc_id = f"{req.type.lower()}_{req.name.replace(' ', '_').replace('/', '_').lower()}"
+        # Check if already exists in this scope
+        doc_id = f"{req.team_id.lower()}_{req.type.lower()}_{req.name.replace(' ', '_').replace('/', '_').lower()}"
         existing = db.collection("categories").document(doc_id).get()
         if existing.exists:
-            return JSONResponse(status_code=400, content={"error": "Category already exists"})
+            return JSONResponse(status_code=400, content={"error": "Category already exists for this team"})
 
         db.collection("categories").document(doc_id).set({
             "name": req.name.strip(),
             "type": req.type,
             "is_builtin": req.is_builtin,
+            "team_id": req.team_id,
             "created_at": time.time()
         })
         return {"status": "success", "id": doc_id}
@@ -667,17 +675,25 @@ async def add_category(req: CategoryCreate):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.delete("/categories/{doc_id}")
-async def delete_category(doc_id: str):
+async def delete_category(doc_id: str, role: str = "user", team_id: str = ""):
     try:
-        doc = db.collection("categories").document(doc_id).get()
+        doc_ref = db.collection("categories").document(doc_id)
+        doc = doc_ref.get()
         if not doc.exists:
             return JSONResponse(status_code=404, content={"error": "Category not found"})
         
         data = doc.to_dict()
         if data.get("is_builtin"):
             return JSONResponse(status_code=403, content={"error": "Cannot delete built-in categories"})
+        
+        # RBAC: Leader can only delete their team's categories. Admin can delete global too.
+        cat_team = data.get("team_id", "global")
+        if role == "leader" and cat_team != team_id:
+            return JSONResponse(status_code=403, content={"error": "Permission denied: Can only delete your team categories"})
+        if role == "user":
+            return JSONResponse(status_code=403, content={"error": "General users cannot delete categories"})
 
-        db.collection("categories").document(doc_id).delete()
+        doc_ref.delete()
         return {"status": "success"}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
