@@ -456,7 +456,7 @@ async def process_batch(background_tasks: BackgroundTasks):
     return {"status": "batch_processing_triggered"}
 
 @app.get("/export-excel")
-async def export_excel(team_id: Optional[str] = None, user_id: Optional[str] = None):
+async def export_excel(team_id: Optional[str] = None, user_id: Optional[str] = None, currency: Optional[str] = None):
     try:
         # Build query for COMPLETED and VERIFIED results
         docs_ref_query = db.collection("extractions")\
@@ -522,8 +522,10 @@ async def export_excel(team_id: Optional[str] = None, user_id: Optional[str] = N
             return {"error": "No completed extractions to export"}
             
         # Determine target currency (V2)
-        target_currency = "BHD"
-        if user_id:
+        target_currency = currency.strip().upper() if currency else "BHD"
+        
+        # If no explicit currency provided, try to look up from user entity
+        if not currency and user_id:
             user_doc = db.collection("users").document(user_id).get()
             if user_doc.exists:
                 u_data = user_doc.to_dict()

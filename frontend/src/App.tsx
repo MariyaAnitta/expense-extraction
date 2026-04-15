@@ -451,7 +451,7 @@ export default function App() {
       }
 
       const response = await axios.get(`${API_URL}/export-excel`, { 
-        params, 
+        params: { ...params, currency: userCurrency }, 
         responseType: 'blob' 
       });
 
@@ -896,7 +896,13 @@ export default function App() {
                                   <>
                                     <option value="Food">Food</option>
                                     <option value="Travel">Travel</option>
-                                    <option value="Visa">Visa</option>
+                                    <option value="Visa/LMRA">Visa/LMRA</option>
+                                    <option value="SIO">SIO</option>
+                                    <option value="Municipality/EWA">Municipality/EWA</option>
+                                    <option value="Internet/Mobile">Internet/Mobile</option>
+                                    <option value="Amex Payment">Amex Payment</option>
+                                    <option value="Government Fees">Government Fees (CR/BCCI)</option>
+                                    <option value="Parking">Parking</option>
                                     <option value="Fuel">Fuel</option>
                                     <option value="Stationery">Stationery</option>
                                     <option value="Other">Other</option>

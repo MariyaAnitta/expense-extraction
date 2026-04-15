@@ -102,7 +102,7 @@ class ReceiptProcessor:
         - "amount": null
         
         JSON Structure:
-        {{
+        {
             "date": "YYYY-MM-DD",
             "description": "Short summary of what was paid for",
             "amount": float or null,
@@ -111,8 +111,23 @@ class ReceiptProcessor:
             "received_by": "Name of the entity or person",
             "transaction_no": "Reference string or null",
             "category": "Expense" or "Deposit",
+            "sub_type": "One of: [Food, Travel, Visa/LMRA, SIO, Municipality/EWA, Internet/Mobile, Amex Payment, Government Fees, Parking, Office Tools, Fuel, Bank, Cash, Other]",
             "remarks": "ok"
-        }}
+        }
+
+        Categorization Logic for 'sub_type':
+        - If Category is 'Deposit': Use 'Bank' or 'Cash'.
+        - If Category is 'Expense':
+            - 'Visa/LMRA': RP Renewal, Visa fees, LMRA.
+            - 'Internet/Mobile': Batelco, Mifi, Mobile bills.
+            - 'SIO': SIO payments.
+            - 'Municipality/EWA': Municipality fees, EWA bills.
+            - 'Amex Payment': American Express/Amex.
+            - 'Government Fees': CR Renewal, Ministry of Industry, BCCI.
+            - 'Parking': Parking receipts.
+            - 'Food': Restaurants, Lunch, Coffee.
+            - 'Travel/Fuel': Airline, Fuel, Petrol, Uber.
+            - Default to 'Other' if no clear match.
 
         Text to analyze:
         {raw_text}

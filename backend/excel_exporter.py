@@ -12,12 +12,14 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
         ws = wb.active
         
         # V2 Step D: Programmatic Find & Replace BHD with target currency
-        # This scans the template and replaces static labels/headers without changing rows/columns
         if currency.strip().upper() != "BHD":
             for row in ws.iter_rows():
                 for cell in row:
                     if cell.value and isinstance(cell.value, str) and "BHD" in cell.value:
                         cell.value = cell.value.replace("BHD", currency.strip().upper())
+                    # Also replace BHD in number formats just in case
+                    if cell.number_format and "BHD" in cell.number_format:
+                        cell.number_format = cell.number_format.replace("BHD", f'"{currency}"')
     else:
         # Fallback if template is missing
         wb = openpyxl.Workbook()
@@ -111,13 +113,18 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
             desc = d.description or d.category or "Expense"
             ws.cell(row=row_idx, column=2, value=str(desc))
             
-            if dep != 0: ws.cell(row=row_idx, column=3, value=dep)
-            if exp != 0: ws.cell(row=row_idx, column=4, value=exp)
+            if dep != 0: 
+                c = ws.cell(row=row_idx, column=3, value=dep)
+                c.number_format = currency_format
+            if exp != 0: 
+                c = ws.cell(row=row_idx, column=4, value=exp)
+                c.number_format = currency_format
             
             rb = d.received_by or ""
             ws.cell(row=row_idx, column=5, value=str(rb))
             
-            ws.cell(row=row_idx, column=6, value=running_balance)
+            c_bal = ws.cell(row=row_idx, column=6, value=running_balance)
+            c_bal.number_format = currency_format
             ws.cell(row=row_idx, column=7, value=str(d.remarks or "ok"))
             
             row_idx += 1
