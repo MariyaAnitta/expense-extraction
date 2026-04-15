@@ -21,13 +21,9 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
                         cell.value = cell.value.replace("BHD", target_curr)
                     
                     # 2. Surgical number_format replacement (Corruption fix)
-                    # We wrap the currency in quotes to ensure Excel treats it as literal text
+                    # Use currency code directly without extra quotes to avoid visual noise
                     if cell.number_format and "BHD" in cell.number_format:
-                        # Find out if BHD was already quoted in the format
-                        if f'"{target_curr}"' not in cell.number_format:
-                            cell.number_format = cell.number_format.replace("BHD", f'"{target_curr}"')
-                        else:
-                            cell.number_format = cell.number_format.replace("BHD", target_curr)
+                        cell.number_format = cell.number_format.replace("BHD", target_curr)
     else:
         # Fallback if template is missing
         wb = openpyxl.Workbook()
@@ -134,18 +130,18 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
                 c = ws.cell(row=row_idx, column=3, value=dep)
                 # Apply format only if not already set or specifically needed
                 if "0.000" not in (c.number_format or ""):
-                    c.number_format = f'"{currency}" #,##0.000'
+                    c.number_format = f'{currency} #,##0.000'
             if exp != 0: 
                 c = ws.cell(row=row_idx, column=4, value=exp)
                 if "0.000" not in (c.number_format or ""):
-                    c.number_format = f'"{currency}" #,##0.000'
+                    c.number_format = f'{currency} #,##0.000'
             
             rb = d.received_by or ""
             ws.cell(row=row_idx, column=5, value=str(rb))
             
             c_bal = ws.cell(row=row_idx, column=6, value=running_balance)
             if "0.000" not in (c_bal.number_format or ""):
-                c_bal.number_format = f'"{currency}" #,##0.000'
+                c_bal.number_format = f'{currency} #,##0.000'
             ws.cell(row=row_idx, column=7, value=str(d.remarks or "ok"))
             
             row_idx += 1

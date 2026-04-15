@@ -644,8 +644,11 @@ async def create_user(req: UserCreate):
 @app.get("/categories")
 async def get_categories(team_id: Optional[str] = None):
     try:
-        if team_id:
-            docs = db.collection("categories").where("team_id", "in", ["global", team_id]).stream()
+        # Normalize team_id to lowercase for consistent comparison
+        clean_team = team_id.lower().strip() if team_id else None
+        
+        if clean_team:
+            docs = db.collection("categories").where("team_id", "in", ["global", clean_team]).stream()
         else:
             docs = db.collection("categories").where("team_id", "==", "global").stream()
         
@@ -657,17 +660,21 @@ async def get_categories(team_id: Optional[str] = None):
 @app.post("/categories")
 async def add_category(req: CategoryCreate):
     try:
+        # Normalize data
+        clean_team = req.team_id.lower().strip()
+        clean_name = req.name.strip()
+        
         # Check if already exists in this scope
-        doc_id = f"{req.team_id.lower()}_{req.type.lower()}_{req.name.replace(' ', '_').replace('/', '_').lower()}"
+        doc_id = f"{clean_team}_{req.type.lower()}_{clean_name.replace(' ', '_').replace('/', '_').lower()}"
         existing = db.collection("categories").document(doc_id).get()
         if existing.exists:
             return JSONResponse(status_code=400, content={"error": "Category already exists for this team"})
 
         db.collection("categories").document(doc_id).set({
-            "name": req.name.strip(),
+            "name": clean_name,
             "type": req.type,
             "is_builtin": req.is_builtin,
-            "team_id": req.team_id,
+            "team_id": clean_team,
             "created_at": time.time()
         })
         return {"status": "success", "id": doc_id}
@@ -677,6 +684,7 @@ async def add_category(req: CategoryCreate):
 @app.delete("/categories/{doc_id}")
 async def delete_category(doc_id: str, role: str = "user", team_id: str = ""):
     try:
+        print(f"DEBUG: Delete request for {doc_id} by role={role}, team_id={team_id}")
         doc_ref = db.collection("categories").document(doc_id)
         doc = doc_ref.get()
         if not doc.exists:
@@ -686,16 +694,24 @@ async def delete_category(doc_id: str, role: str = "user", team_id: str = ""):
         if data.get("is_builtin"):
             return JSONResponse(status_code=403, content={"error": "Cannot delete built-in categories"})
         
+        # Normalize input
+        clean_role = role.strip().lower()
+        clean_team = team_id.strip().lower()
+        
         # RBAC: Leader can only delete their team's categories. Admin can delete global too.
-        cat_team = data.get("team_id", "global")
-        if role == "leader" and cat_team != team_id:
-            return JSONResponse(status_code=403, content={"error": "Permission denied: Can only delete your team categories"})
-        if role == "user":
+        cat_team = data.get("team_id", "global").lower()
+        if clean_role == "leader" and cat_team != clean_team:
+            print(f"DEBUG: Permission denied. Category team={cat_team}, User team={clean_team}")
+            return JSONResponse(status_code=403, content={"error": f"Permission denied: Can only delete categories for team {clean_team}"})
+        if clean_role == "user":
+            print(f"DEBUG: Permission denied. User is a general user.")
             return JSONResponse(status_code=403, content={"error": "General users cannot delete categories"})
 
         doc_ref.delete()
+        print(f"DEBUG: Successfully deleted category {doc_id}")
         return {"status": "success"}
     except Exception as e:
+        print(f"ERROR: Delete failed: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 # ============================================================

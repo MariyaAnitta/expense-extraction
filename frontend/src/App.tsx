@@ -307,6 +307,24 @@ export default function App() {
     return () => unsubscribe();
   }, [authUser, userRole, userData, teamFilter, userFilter]);
 
+  // V3: Initial fetch for Dynamic Categories (Scoping by Team)
+  useEffect(() => {
+    const fetchCategories = async () => {
+      if (!userData) return;
+      try {
+        const tid = (userData?.team_id || "General").toLowerCase().trim();
+        const res = await axios.get(`${API_URL}/categories`, { params: { team_id: tid } });
+        if (res.data.status === 'success') {
+          console.log("Categories Initialized:", res.data.categories.length);
+          setDbCategories(res.data.categories);
+        }
+      } catch (err) {
+        console.error("Failed to fetch initial categories", err);
+      }
+    };
+    fetchCategories();
+  }, [userData]);
+
   const uploadFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     
@@ -892,10 +910,11 @@ export default function App() {
                                           team_id: teamId
                                         });
                                         // Refresh local list
-                                        const res = await axios.get(`${API_URL}/categories`, { params: { team_id: teamId } });
+                                        const res = await axios.get(`${API_URL}/categories`, { params: { team_id: teamId.toLowerCase().trim() } });
                                         if (res.data.status === 'success') setDbCategories(res.data.categories);
                                         handleDataChange('sub_type' as keyof ReceiptData, custom.trim());
                                       } catch (err: any) {
+                                        console.error("ADD CATEGORY ERROR:", err.response?.data);
                                         alert(err.response?.data?.error || "Failed to add category");
                                       }
                                     }
@@ -954,12 +973,13 @@ export default function App() {
                                       try {
                                         const tid = userData?.team_id || "General";
                                         await axios.delete(`${API_URL}/categories/${selectedCat.id}`, {
-                                          params: { role: userRole, team_id: tid }
+                                          params: { role: userRole, team_id: tid.toLowerCase().trim() }
                                         });
-                                        const res = await axios.get(`${API_URL}/categories`, { params: { team_id: tid } });
+                                        const res = await axios.get(`${API_URL}/categories`, { params: { team_id: tid.toLowerCase().trim() } });
                                         if (res.data.status === 'success') setDbCategories(res.data.categories);
                                         handleDataChange('sub_type' as keyof ReceiptData, '');
                                       } catch (err: any) {
+                                        console.error("DELETE CATEGORY ERROR:", err.response?.data);
                                         alert(err.response?.data?.error || "Failed to delete category");
                                       }
                                     }}
