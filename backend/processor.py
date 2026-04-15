@@ -104,16 +104,19 @@ class ReceiptProcessor:
         JSON Structure:
         {
             "date": "YYYY-MM-DD",
-            "description": "Short summary of what was paid for",
-            "amount": float or null,
-            "deposit_amount": float or null,
+            "description": "Short summary",
+            "amount": 0.0,
+            "deposit_amount": null,
             "currency": "{currency}",
-            "received_by": "Name of the entity or person",
-            "transaction_no": "Reference string or null",
-            "category": "Expense" or "Deposit",
-            "sub_type": "One of: [Food, Travel, Visa/LMRA, SIO, Municipality/EWA, Internet/Mobile, Amex Payment, Government Fees, Parking, Office Tools, Fuel, Bank, Cash, Other]",
+            "received_by": "Entity name",
+            "transaction_no": "Reference",
+            "category": "Expense",
+            "sub_type": "Other",
             "remarks": "ok"
         }
+
+        Valid Options for 'category': ["Expense", "Deposit"]
+        Valid Options for 'sub_type': ["Food", "Travel", "Visa/LMRA", "SIO", "Municipality/EWA", "Internet/Mobile", "Amex Payment", "Government Fees", "Parking", "Fuel", "Stationery", "Other", "Bank", "Cash"]
 
         Categorization Logic for 'sub_type':
         - If Category is 'Deposit': Use 'Bank' or 'Cash'.

@@ -19,14 +19,14 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
                         cell.value = cell.value.replace("BHD", currency.strip().upper())
                     # Also replace BHD in number formats just in case
                     if cell.number_format and "BHD" in cell.number_format:
-                        cell.number_format = cell.number_format.replace("BHD", f'"{currency}"')
+                        cell.number_format = cell.number_format.replace("BHD", currency.strip().upper())
     else:
         # Fallback if template is missing
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Petty Cash Log"
 
-    currency_format = f'"{currency}" #,##0.000'
+    currency_format = f'{currency} #,##0.000'
 
     # --- Date Sorting Logic ---
     def parse_date(date_str):
