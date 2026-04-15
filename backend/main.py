@@ -118,15 +118,27 @@ async def run_batch_processor():
             # 0. V2: Fetch entity currency for AI Hint
             hint_currency = "BHD"
             uid = data.get("user_id")
-            if uid:
+            team_id = data.get("team_id", "General")
+            
+            # Logic: If user exists, use their entity. 
+            # If it's automation, use the team leader's entity.
+            target_ent_id = None
+            if uid and uid != "automation":
                 user_doc = db.collection("users").document(uid).get()
                 if user_doc.exists:
-                    u_data = user_doc.to_dict()
-                    ent_id = u_data.get("entity_id")
-                    if ent_id and ent_id != "default":
-                        ent_doc = db.collection("entities").document(ent_id).get()
-                        if ent_doc.exists:
-                            hint_currency = ent_doc.to_dict().get("currency", "BHD")
+                    target_ent_id = user_doc.to_dict().get("entity_id")
+            
+            if not target_ent_id or target_ent_id == "default":
+                # Automation or user without entity: try to find a leader for this team
+                leaders = db.collection("users").where("team_id", "==", team_id.lower()).where("role", "==", "leader").limit(1).stream()
+                for l in leaders:
+                    target_ent_id = l.to_dict().get("entity_id")
+                    break
+            
+            if target_ent_id and target_ent_id != "default":
+                ent_doc = db.collection("entities").document(target_ent_id).get()
+                if ent_doc.exists:
+                    hint_currency = ent_doc.to_dict().get("currency", "BHD")
 
             # 0.5 V3: Fetch Dynamic Categories for AI Taxonomy (Scoping by Team)
             dynamic_cats = []

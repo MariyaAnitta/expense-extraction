@@ -24,6 +24,30 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
                     # Use currency code directly without extra quotes to avoid visual noise
                     if cell.number_format and "BHD" in cell.number_format:
                         cell.number_format = cell.number_format.replace("BHD", target_curr)
+
+            # V3: Insert Categorical Columns (Deposit Category & Expense Category)
+            ws.insert_cols(3, 2)
+            
+            # Set Headers
+            ws.cell(row=4, column=3, value="Deposit Category")
+            ws.cell(row=4, column=4, value="Expense Category")
+            
+            # Apply Style from Description Column (Col 2)
+            header_font = ws.cell(row=4, column=2).font
+            header_fill = ws.cell(row=4, column=2).fill
+            header_align = ws.cell(row=4, column=2).alignment
+            header_border = ws.cell(row=4, column=2).border
+            
+            for col in [3, 4]:
+                c = ws.cell(row=4, column=col)
+                if header_font: c.font = Font(name=header_font.name, size=header_font.size, bold=header_font.bold, color=header_font.color)
+                if header_fill: c.fill = PatternFill(start_color=header_fill.start_color, end_color=header_fill.end_color, fill_type=header_fill.fill_type)
+                if header_align: c.alignment = Alignment(horizontal=header_align.horizontal, vertical=header_align.vertical)
+                if header_border: c.border = Border(left=header_border.left, right=header_border.right, top=header_border.top, bottom=header_border.bottom)
+            
+            # Set reasonable widths
+            ws.column_dimensions['C'].width = 20
+            ws.column_dimensions['D'].width = 20
     else:
         # Fallback if template is missing
         wb = openpyxl.Workbook()
@@ -126,23 +150,33 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
             desc = d.description or d.category or "Expense"
             ws.cell(row=row_idx, column=2, value=str(desc))
             
+            # Categories (Col 3 & 4)
+            cat_type = d.category or "Expense"
+            sub_type = d.sub_type or ""
+            if cat_type == "Deposit":
+                ws.cell(row=row_idx, column=3, value=str(sub_type))
+                ws.cell(row=row_idx, column=4, value="")
+            else:
+                ws.cell(row=row_idx, column=3, value="")
+                ws.cell(row=row_idx, column=4, value=str(sub_type))
+
             if dep != 0: 
-                c = ws.cell(row=row_idx, column=3, value=dep)
+                c = ws.cell(row=row_idx, column=5, value=dep) # Shifted to 5
                 # Apply format only if not already set or specifically needed
                 if "0.000" not in (c.number_format or ""):
                     c.number_format = f'{currency} #,##0.000'
             if exp != 0: 
-                c = ws.cell(row=row_idx, column=4, value=exp)
+                c = ws.cell(row=row_idx, column=6, value=exp) # Shifted to 6
                 if "0.000" not in (c.number_format or ""):
                     c.number_format = f'{currency} #,##0.000'
             
             rb = d.received_by or ""
-            ws.cell(row=row_idx, column=5, value=str(rb))
+            ws.cell(row=row_idx, column=7, value=str(rb)) # Shifted to 7
             
-            c_bal = ws.cell(row=row_idx, column=6, value=running_balance)
+            c_bal = ws.cell(row=row_idx, column=8, value=running_balance) # Shifted to 8
             if "0.000" not in (c_bal.number_format or ""):
                 c_bal.number_format = f'{currency} #,##0.000'
-            ws.cell(row=row_idx, column=7, value=str(d.remarks or "ok"))
+            ws.cell(row=row_idx, column=9, value=str(d.remarks or "ok")) # Shifted to 9
             
             row_idx += 1
         except Exception as e:

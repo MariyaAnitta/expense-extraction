@@ -58,7 +58,6 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
     
     if (userRole === 'admin') {
       q = query(baseCol, orderBy('created_at', 'desc'));
-      axios.get(`${API_URL}/entities`).then(res => setEntities(res.data.entities || [])).catch(console.error);
       
       // Fetch countries from REST Countries API
       axios.get('https://restcountries.com/v3.1/all?fields=name,currencies')
@@ -94,7 +93,20 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
         setUsers(teamMembers);
       }
     });
-    return () => unsubscribe();
+    
+    // V3: Real-time Entities for Leaders too (to see their own team's entity name)
+    let entityUnsub: any = null;
+    if (userRole === 'leader' || userRole === 'admin') {
+       entityUnsub = onSnapshot(collection(db, 'entities'), (snapshot) => {
+          const entData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setEntities(entData);
+       });
+    }
+
+    return () => {
+      unsubscribe();
+      if (entityUnsub) entityUnsub();
+    };
   }, [userRole, userTeam]);
 
   const handleCreateUser = async (e: React.FormEvent) => {
