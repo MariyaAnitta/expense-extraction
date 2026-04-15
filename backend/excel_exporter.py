@@ -69,7 +69,7 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
 
     # 1. Update Headers
     try:
-        ws['F1'] = receipt_year
+        ws['H1'] = receipt_year
         if min_date and max_date:
             ws['A3'] = f"For {min_date.strftime('%d/%m/%Y')} through {max_date.strftime('%d/%m/%Y')}"
         else:
@@ -92,7 +92,7 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
         current_balance -= safe_float(r.data.amount)
             
     try:
-        ws['D3'] = current_balance
+        ws['F3'] = current_balance
     except Exception as e:
         print(f"ERROR: Failed to update D3 balance: {e}")
 
