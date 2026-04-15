@@ -98,6 +98,7 @@ export default function App() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [userData, setUserData] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [dbCategories, setDbCategories] = useState<any[]>([]);
   const [currentView, setCurrentView] = useState<'board' | 'admin' | 'team' | 'analytics'>('board');
   
   const [userCurrency, setUserCurrency] = useState('BHD');
@@ -877,36 +878,60 @@ export default function App() {
                                   !selectedResult.data?.sub_type && "border-2 border-rose-100 bg-rose-50/10"
                                 )}
                                 value={selectedResult.data?.sub_type || ''}
-                                onChange={e => {
+                                onChange={async e => {
                                   if (e.target.value === 'ADD_NEW') {
-                                    const custom = prompt("Enter custom category type:");
-                                    if (custom) handleDataChange('sub_type' as keyof ReceiptData, custom);
+                                    const custom = prompt("Enter new custom category name:");
+                                    if (custom && custom.trim()) {
+                                      try {
+                                        const type = selectedResult.data?.category || 'Expense';
+                                        await axios.post(`${API_URL}/categories`, {
+                                          name: custom.trim(),
+                                          type: type,
+                                          is_builtin: false
+                                        });
+                                        // Refresh local list
+                                        const res = await axios.get(`${API_URL}/categories`);
+                                        if (res.data.status === 'success') setDbCategories(res.data.categories);
+                                        handleDataChange('sub_type' as keyof ReceiptData, custom.trim());
+                                      } catch (err: any) {
+                                        alert(err.response?.data?.error || "Failed to add category");
+                                      }
+                                    }
                                   } else {
                                     handleDataChange('sub_type' as keyof ReceiptData, e.target.value);
                                   }
                                 }}
                               >
                                 <option value="" disabled>Select Type...</option>
-                                {selectedResult.data?.category === 'Deposit' ? (
-                                  <>
-                                    <option value="Cash">Cash</option>
-                                    <option value="Bank">Bank</option>
-                                  </>
-                                ) : (
-                                  <>
-                                    <option value="Food">Food</option>
-                                    <option value="Travel">Travel</option>
-                                    <option value="Visa/LMRA">Visa/LMRA</option>
-                                    <option value="SIO">SIO</option>
-                                    <option value="Municipality/EWA">Municipality/EWA</option>
-                                    <option value="Internet/Mobile">Internet/Mobile</option>
-                                    <option value="Amex Payment">Amex Payment</option>
-                                    <option value="Government Fees">Government Fees (CR/BCCI)</option>
-                                    <option value="Parking">Parking</option>
-                                    <option value="Fuel">Fuel</option>
-                                    <option value="Stationery">Stationery</option>
-                                    <option value="Other">Other</option>
-                                  </>
+                                {dbCategories
+                                  .filter(c => c.type === (selectedResult.data?.category || 'Expense'))
+                                  .sort((a,b) => a.name.localeCompare(b.name))
+                                  .map(cat => (
+                                    <option key={cat.id} value={cat.name}>{cat.name}</option>
+                                  ))
+                                }
+                                {(dbCategories.length === 0) && (
+                                  selectedResult.data?.category === 'Deposit' ? (
+                                    <>
+                                      <option value="Cash">Cash</option>
+                                      <option value="Bank">Bank</option>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <option value="Food">Food</option>
+                                      <option value="Travel">Travel</option>
+                                      <option value="Visa/LMRA">Visa/LMRA</option>
+                                      <option value="SIO">SIO</option>
+                                      <option value="Municipality/EWA">Municipality/EWA</option>
+                                      <option value="Internet/Mobile">Internet/Mobile</option>
+                                      <option value="Amex Payment">Amex Payment</option>
+                                      <option value="Government Fees">Government Fees (CR/BCCI)</option>
+                                      <option value="Parking">Parking</option>
+                                      <option value="Fuel">Fuel</option>
+                                      <option value="Stationery">Stationery</option>
+                                      <option value="Other">Other</option>
+                                    </>
+                                  )
                                 )}
                                 {(userRole === 'admin' || userRole === 'leader') && (
                                   <option value="ADD_NEW" className="text-indigo-600 font-bold">+ Add Custom Type</option>
@@ -916,6 +941,31 @@ export default function App() {
                                 <Plus size={14} />
                               </div>
                             </div>
+                            {/* V3: Delete Category Interaction for Admins/Leaders */}
+                            {(() => {
+                              const selectedCat = dbCategories.find(c => c.name === selectedResult.data?.sub_type);
+                              if (selectedCat && !selectedCat.is_builtin && (userRole === 'admin' || userRole === 'leader')) {
+                                return (
+                                  <button 
+                                    onClick={async () => {
+                                      if (!confirm(`Delete category "${selectedCat.name}" permanently for everyone?`)) return;
+                                      try {
+                                        await axios.delete(`${API_URL}/categories/${selectedCat.id}`);
+                                        const res = await axios.get(`${API_URL}/categories`);
+                                        if (res.data.status === 'success') setDbCategories(res.data.categories);
+                                        handleDataChange('sub_type' as keyof ReceiptData, '');
+                                      } catch (err: any) {
+                                        alert(err.response?.data?.error || "Failed to delete category");
+                                      }
+                                    }}
+                                    className="text-[10px] font-black text-rose-500 hover:text-rose-600 uppercase tracking-widest flex items-center gap-1 mt-1 ml-1"
+                                  >
+                                    <Trash2 size={10} /> Delete Global Category
+                                  </button>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                         )}
                         <div className="pt-4 flex flex-col gap-3">

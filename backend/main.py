@@ -128,8 +128,16 @@ async def run_batch_processor():
                         if ent_doc.exists:
                             hint_currency = ent_doc.to_dict().get("currency", "BHD")
 
+            # 0.5 V3: Fetch Dynamic Categories for AI Taxonomy
+            dynamic_cats = []
+            try:
+                cat_docs = db.collection("categories").stream()
+                dynamic_cats = [c.to_dict().get("name") for c in cat_docs if c.to_dict().get("name")]
+            except Exception as cat_err:
+                print(f"Warning: Failed to fetch dynamic categories: {cat_err}")
+
             # 1. Process the AI Extraction
-            result = processor.process_file(temp_path, currency=hint_currency)
+            result = processor.process_file(temp_path, currency=hint_currency, dynamic_categories=dynamic_cats)
             
             # 2. Upload to Supabase for permanent viewing (if successful)
             image_url = None
@@ -565,6 +573,11 @@ class EntityCreate(BaseModel):
     currency: str
     symbol: Optional[str] = ""
 
+class CategoryCreate(BaseModel):
+    name: str
+    type: str # Expense or Deposit
+    is_builtin: bool = False
+
 # --- ENTITY MANAGEMENT (V2) ---
 @app.get("/entities")
 async def get_entities():
@@ -623,6 +636,51 @@ async def create_user(req: UserCreate):
         print(f"Error creating user: {error_msg}")
         from fastapi.responses import JSONResponse
         return JSONResponse(status_code=400, content={"error": str(e)})
+
+# --- CATEGORY MANAGEMENT (V3) ---
+@app.get("/categories")
+async def get_categories():
+    try:
+        docs = db.collection("categories").stream()
+        categories = [{"id": d.id, **d.to_dict()} for d in docs]
+        return {"status": "success", "categories": categories}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/categories")
+async def add_category(req: CategoryCreate):
+    try:
+        # Check if already exists
+        doc_id = f"{req.type.lower()}_{req.name.replace(' ', '_').replace('/', '_').lower()}"
+        existing = db.collection("categories").document(doc_id).get()
+        if existing.exists:
+            return JSONResponse(status_code=400, content={"error": "Category already exists"})
+
+        db.collection("categories").document(doc_id).set({
+            "name": req.name.strip(),
+            "type": req.type,
+            "is_builtin": req.is_builtin,
+            "created_at": time.time()
+        })
+        return {"status": "success", "id": doc_id}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.delete("/categories/{doc_id}")
+async def delete_category(doc_id: str):
+    try:
+        doc = db.collection("categories").document(doc_id).get()
+        if not doc.exists:
+            return JSONResponse(status_code=404, content={"error": "Category not found"})
+        
+        data = doc.to_dict()
+        if data.get("is_builtin"):
+            return JSONResponse(status_code=403, content={"error": "Cannot delete built-in categories"})
+
+        db.collection("categories").document(doc_id).delete()
+        return {"status": "success"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 # ============================================================
 # GOOGLE DRIVE INTEGRATION

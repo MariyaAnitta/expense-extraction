@@ -79,8 +79,12 @@ class ReceiptProcessor:
         msg = extract_msg.Message(file_path)
         return f"Subject: {msg.subject}\nFrom: {msg.sender}\nDate: {msg.date}\nBody: {msg.body}"
 
-    def _structure_data_vertex(self, raw_text: str, confidence: float = 95.0, currency: str = "BHD") -> ReceiptData:
+    def _structure_data_vertex(self, raw_text: str, confidence: float = 95.0, currency: str = "BHD", dynamic_categories: Optional[list] = None) -> ReceiptData:
         """Use Gemini to structure the extracted text into ReceiptData"""
+        
+        # Build category list for prompt
+        categories_str = ", ".join(dynamic_categories) if dynamic_categories else "Food, Travel, Visa/LMRA, SIO, Municipality/EWA, Internet/Mobile, Amex Payment, Government Fees, Parking, Fuel, Stationery, Other, Bank, Cash"
+        
         prompt = f"""
         Extract the following information from the provided receipt/document text into a valid JSON object.
         
@@ -116,7 +120,7 @@ class ReceiptProcessor:
         }}
 
         Valid Options for 'category': ["Expense", "Deposit"]
-        Valid Options for 'sub_type': ["Food", "Travel", "Visa/LMRA", "SIO", "Municipality/EWA", "Internet/Mobile", "Amex Payment", "Government Fees", "Parking", "Fuel", "Stationery", "Other", "Bank", "Cash"]
+        Valid Options for 'sub_type': [{categories_str}]
 
         Categorization Logic for 'sub_type':
         - If Category is 'Deposit': Use 'Bank' or 'Cash'.
@@ -178,7 +182,7 @@ class ReceiptProcessor:
             # Re-raise so the calling process_file method correctly marks it as FAILED
             raise
 
-    def process_file(self, file_path: str, currency: str = "BHD") -> ExtractionResult:
+    def process_file(self, file_path: str, currency: str = "BHD", dynamic_categories: Optional[list] = None) -> ExtractionResult:
         """Complete pipeline: Pulse OCR -> Vertex AI Structure"""
         file_name = os.path.basename(file_path)
         file_id = file_name # Simplified ID
@@ -192,7 +196,7 @@ class ReceiptProcessor:
                 raw_text, confidence = self._extract_text_pulse(file_path)
             
             # 2. Structure (Vertex AI)
-            structured_data = self._structure_data_vertex(raw_text, confidence, currency=currency)
+            structured_data = self._structure_data_vertex(raw_text, confidence, currency=currency, dynamic_categories=dynamic_categories)
             
             return ExtractionResult(
                 file_id=file_id,
