@@ -102,7 +102,7 @@ class ReceiptProcessor:
         - "amount": null
         
         JSON Structure:
-        {
+        {{
             "date": "YYYY-MM-DD",
             "description": "Short summary",
             "amount": 0.0,
@@ -113,7 +113,7 @@ class ReceiptProcessor:
             "category": "Expense",
             "sub_type": "Other",
             "remarks": "ok"
-        }
+        }}
 
         Valid Options for 'category': ["Expense", "Deposit"]
         Valid Options for 'sub_type': ["Food", "Travel", "Visa/LMRA", "SIO", "Municipality/EWA", "Internet/Mobile", "Amex Payment", "Government Fees", "Parking", "Fuel", "Stationery", "Other", "Bank", "Cash"]
