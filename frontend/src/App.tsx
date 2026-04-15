@@ -307,22 +307,29 @@ export default function App() {
     return () => unsubscribe();
   }, [authUser, userRole, userData, teamFilter, userFilter]);
 
-  // V3: Initial fetch for Dynamic Categories (Scoping by Team)
+  // V3: REAL-TIME Dynamic Categories (Scoping by Team)
   useEffect(() => {
-    const fetchCategories = async () => {
-      if (!userData) return;
-      try {
-        const tid = (userData?.team_id || "General").toLowerCase().trim();
-        const res = await axios.get(`${API_URL}/categories`, { params: { team_id: tid } });
-        if (res.data.status === 'success') {
-          console.log("Categories Initialized:", res.data.categories.length);
-          setDbCategories(res.data.categories);
-        }
-      } catch (err) {
-        console.error("Failed to fetch initial categories", err);
-      }
-    };
-    fetchCategories();
+    if (!userData) return;
+    const tid = (userData?.team_id || "General").toLowerCase().trim();
+    
+    // Listen for both global and team-specific categories
+    const q = query(
+      collection(db, "categories"),
+      where("team_id", "in", ["global", tid])
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const cats = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      console.log("Categories Updated (Real-time):", cats.length);
+      setDbCategories(cats);
+    }, (error) => {
+      console.error("Categories Listener Error:", error);
+    });
+
+    return () => unsubscribe();
   }, [userData]);
 
   const uploadFiles = async (files: FileList | null) => {
@@ -909,9 +916,7 @@ export default function App() {
                                           is_builtin: false,
                                           team_id: teamId
                                         });
-                                        // Refresh local list
-                                        const res = await axios.get(`${API_URL}/categories`, { params: { team_id: teamId.toLowerCase().trim() } });
-                                        if (res.data.status === 'success') setDbCategories(res.data.categories);
+                                        // V3: No manual refresh needed — onSnapshot handles it!
                                         handleDataChange('sub_type' as keyof ReceiptData, custom.trim());
                                       } catch (err: any) {
                                         console.error("ADD CATEGORY ERROR:", err.response?.data);
@@ -931,29 +936,6 @@ export default function App() {
                                     <option key={cat.id} value={cat.name}>{cat.name}</option>
                                   ))
                                 }
-                                {(dbCategories.length === 0) && (
-                                  selectedResult.data?.category === 'Deposit' ? (
-                                    <>
-                                      <option value="Cash">Cash</option>
-                                      <option value="Bank">Bank</option>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <option value="Food">Food</option>
-                                      <option value="Travel">Travel</option>
-                                      <option value="Visa/LMRA">Visa/LMRA</option>
-                                      <option value="SIO">SIO</option>
-                                      <option value="Municipality/EWA">Municipality/EWA</option>
-                                      <option value="Internet/Mobile">Internet/Mobile</option>
-                                      <option value="Amex Payment">Amex Payment</option>
-                                      <option value="Government Fees">Government Fees (CR/BCCI)</option>
-                                      <option value="Parking">Parking</option>
-                                      <option value="Fuel">Fuel</option>
-                                      <option value="Stationery">Stationery</option>
-                                      <option value="Other">Other</option>
-                                    </>
-                                  )
-                                )}
                                 {(userRole === 'admin' || userRole === 'leader') && (
                                   <option value="ADD_NEW" className="text-indigo-600 font-bold">+ Add Custom Type</option>
                                 )}
@@ -975,8 +957,7 @@ export default function App() {
                                         await axios.delete(`${API_URL}/categories/${selectedCat.id}`, {
                                           params: { role: userRole, team_id: tid.toLowerCase().trim() }
                                         });
-                                        const res = await axios.get(`${API_URL}/categories`, { params: { team_id: tid.toLowerCase().trim() } });
-                                        if (res.data.status === 'success') setDbCategories(res.data.categories);
+                                        // V3: No manual refresh needed — onSnapshot handles it!
                                         handleDataChange('sub_type' as keyof ReceiptData, '');
                                       } catch (err: any) {
                                         console.error("DELETE CATEGORY ERROR:", err.response?.data);
