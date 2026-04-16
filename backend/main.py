@@ -593,6 +593,16 @@ class CategoryCreate(BaseModel):
     is_builtin: bool = False
     team_id: str = "global"
 
+class BankCreate(BaseModel):
+    name: str
+    is_builtin: bool = False
+    team_id: str = "global"
+
+class BankCreate(BaseModel):
+    name: str
+    is_builtin: bool = False
+    team_id: str = "global"
+
 # --- ENTITY MANAGEMENT (V2) ---
 @app.get("/entities")
 async def get_entities():
@@ -724,6 +734,69 @@ async def delete_category(doc_id: str, role: str = "user", team_id: str = ""):
         return {"status": "success"}
     except Exception as e:
         print(f"ERROR: Delete failed: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+# --- BANK MANAGEMENT (V4) ---
+@app.get("/banks")
+async def get_banks(team_id: Optional[str] = None):
+    try:
+        clean_team = team_id.lower().strip() if team_id else None
+        
+        if clean_team:
+            docs = db.collection("banks").where("team_id", "in", ["global", clean_team]).stream()
+        else:
+            docs = db.collection("banks").where("team_id", "==", "global").stream()
+        
+        banks = [{"id": d.id, **d.to_dict()} for d in docs]
+        return {"status": "success", "banks": banks}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/banks")
+async def add_bank(req: BankCreate):
+    try:
+        clean_team = req.team_id.lower().strip()
+        clean_name = req.name.strip()
+        
+        doc_id = f"bank_{clean_team}_{clean_name.replace(' ', '_').lower()}"
+        existing = db.collection("banks").document(doc_id).get()
+        if existing.exists:
+            return JSONResponse(status_code=400, content={"error": "Bank already exists for this team"})
+
+        db.collection("banks").document(doc_id).set({
+            "name": clean_name,
+            "is_builtin": req.is_builtin,
+            "team_id": clean_team,
+            "created_at": time.time()
+        })
+        return {"status": "success", "id": doc_id}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.delete("/banks/{doc_id}")
+async def delete_bank(doc_id: str, role: str = "user", team_id: str = ""):
+    try:
+        doc_ref = db.collection("banks").document(doc_id)
+        doc = doc_ref.get()
+        if not doc.exists:
+            return JSONResponse(status_code=404, content={"error": "Bank not found"})
+        
+        data = doc.to_dict()
+        if data.get("is_builtin") and role != "admin":
+            return JSONResponse(status_code=403, content={"error": "Built-in banks can only be deleted by Admins"})
+        
+        clean_role = role.strip().lower()
+        clean_team = team_id.strip().lower()
+        bank_team = data.get("team_id", "global").lower()
+
+        if clean_role == "leader" and bank_team != clean_team:
+            return JSONResponse(status_code=403, content={"error": f"Permission denied: Can only delete banks for team {clean_team}"})
+        if clean_role == "user":
+            return JSONResponse(status_code=403, content={"error": "General users cannot delete banks"})
+
+        doc_ref.delete()
+        return {"status": "success"}
+    except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 # ============================================================

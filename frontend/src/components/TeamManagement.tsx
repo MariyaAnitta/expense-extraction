@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { collection, onSnapshot, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, deleteDoc, doc, where } from 'firebase/firestore';
 import { Users, UserPlus, Trash2, Mail, Shield, CheckCircle2, LayoutDashboard, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
@@ -34,6 +34,8 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
   const [countries, setCountries] = useState<CountryData[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showEntityForm, setShowEntityForm] = useState(false);
+  const [showBankForm, setShowBankForm] = useState(false);
+  const [banks, setBanks] = useState<any[]>([]);
   
   // New user form state
   const [email, setEmail] = useState('');
@@ -103,9 +105,25 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
        });
     }
 
+    // V4: Real-time Banks
+    let bankUnsub: any = null;
+    if (userRole === 'leader' || userRole === 'admin') {
+      const tid = (userTeam || 'General').toLowerCase().trim();
+      const baseBankCol = collection(db, 'banks');
+      const qBanks = userRole === 'admin' 
+        ? baseBankCol 
+        : query(baseBankCol, where("team_id", "in", ["global", tid]));
+      
+      bankUnsub = onSnapshot(qBanks, (snapshot) => {
+        const bankData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setBanks(bankData);
+      });
+    }
+
     return () => {
       unsubscribe();
       if (entityUnsub) entityUnsub();
+      if (bankUnsub) bankUnsub();
     };
   }, [userRole, userTeam]);
 
@@ -224,11 +242,23 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
             >
               {showEntityForm ? 'Cancel' : 'Manage Entities'}
             </button>
+            <button 
+              onClick={() => setShowBankForm(!showBankForm)}
+              className="bg-white border text-slate-700 hover:bg-slate-50 border-slate-200 px-6 py-3 rounded-full flex items-center gap-2 font-bold text-sm shadow-sm transition-all active:scale-95"
+            >
+              {showBankForm ? 'Cancel' : 'Manage Banks'}
+            </button>
           </div>
         )}
 
         {userRole === 'leader' && (
           <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setShowBankForm(!showBankForm)}
+              className="bg-white border text-slate-700 hover:bg-slate-50 border-slate-200 px-6 py-3 rounded-full flex items-center gap-2 font-bold text-sm shadow-sm transition-all active:scale-95"
+            >
+              {showBankForm ? 'Cancel' : 'Bank Registry'}
+            </button>
             <button 
               onClick={async () => {
                 const targetName = userTeam || 'General';
@@ -442,6 +472,81 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
                   </div>
                </div>
              </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showBankForm && (userRole === 'admin' || userRole === 'leader') && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0, scale: 0.95 }}
+            animate={{ opacity: 1, height: 'auto', scale: 1 }}
+            exit={{ opacity: 0, height: 0, scale: 0.95 }}
+            className="overflow-hidden mb-8"
+          >
+            <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-amber-50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 opacity-30 pointer-events-none"></div>
+              
+              <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+                <Shield size={20} className="text-amber-500" /> Bank Registry Management
+              </h3>
+
+              <div className="flex gap-4 mb-8 relative z-10">
+                <input 
+                  type="text" 
+                  placeholder="Enter Bank Name (e.g. CITI Bank)" 
+                  className="flex-1 bg-slate-50 border border-transparent rounded-2xl py-3.5 px-6 text-sm font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-amber-100 outline-none"
+                  onKeyDown={async (e) => {
+                    if (e.key === 'Enter') {
+                      const name = (e.target as HTMLInputElement).value;
+                      if (!name.trim()) return;
+                      try {
+                        const tid = userRole === 'admin' ? 'global' : (userTeam || 'General');
+                        await axios.post(`${API_URL}/banks`, {
+                          name: name.trim(),
+                          is_builtin: userRole === 'admin', 
+                          team_id: tid
+                        });
+                        (e.target as HTMLInputElement).value = '';
+                      } catch (err: any) {
+                        alert(err.response?.data?.error || "Failed to add bank");
+                      }
+                    }
+                  }}
+                />
+                <p className="text-[10px] text-slate-300 font-bold self-center italic">Press Enter to Add</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
+                {banks.length === 0 ? (
+                  <p className="col-span-3 text-center py-8 text-slate-400 font-medium italic">No banks registered yet.</p>
+                ) : (
+                  banks.sort((a,b) => a.name.localeCompare(b.name)).map(bank => (
+                    <div key={bank.id} className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 group transition-all hover:border-amber-100">
+                      <div>
+                        <p className="font-bold text-slate-800 text-sm">{bank.name}</p>
+                        {bank.team_id === 'global' && <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Global Account</span>}
+                      </div>
+                      <button 
+                        onClick={async () => {
+                          if (!confirm(`Delete bank "${bank.name}"?`)) return;
+                          try {
+                            await axios.delete(`${API_URL}/banks/${bank.id}`, {
+                              params: { role: userRole, team_id: userTeam?.toLowerCase().trim() }
+                            });
+                          } catch (err: any) {
+                            alert(err.response?.data?.error || "Failed to delete");
+                          }
+                        }}
+                        className="p-2 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -15,6 +15,7 @@ class ReceiptData(BaseModel):
     category: Optional[str] = Field("Expense", description="Type of transaction (Expense/Deposit)")
     remarks: Optional[str] = Field("ok", description="Additional remarks")
     sub_type: Optional[str] = Field("", description="Detailed Category sub-type")
+    bank: Optional[str] = Field("", description="Bank account for the transaction")
     confidence: float = Field(0.0, description="AI confidence score 0-100")
 
 class ExtractionResult(BaseModel):

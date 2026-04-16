@@ -38,6 +38,7 @@ interface ReceiptData {
   category?: string;
   remarks: string;
   sub_type?: string;
+  bank?: string;
   confidence: number;
 }
 
@@ -99,6 +100,7 @@ export default function App() {
   const [userData, setUserData] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [dbCategories, setDbCategories] = useState<any[]>([]);
+  const [dbBanks, setDbBanks] = useState<any[]>([]);
   const [currentView, setCurrentView] = useState<'board' | 'admin' | 'team' | 'analytics'>('board');
   
   const [userCurrency, setUserCurrency] = useState('BHD');
@@ -327,6 +329,31 @@ export default function App() {
       setDbCategories(cats);
     }, (error) => {
       console.error("Categories Listener Error:", error);
+    });
+
+    return () => unsubscribe();
+  }, [userData]);
+
+  // V4: REAL-TIME Banks (Scoping by Team)
+  useEffect(() => {
+    if (!userData) return;
+    const tid = (userData?.team_id || "General").toLowerCase().trim();
+    
+    // Listen for both global and team-specific banks
+    const q = query(
+      collection(db, "banks"),
+      where("team_id", "in", ["global", tid])
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const banks = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      console.log("Banks Updated (Real-time):", banks.length);
+      setDbBanks(banks);
+    }, (error) => {
+      console.error("Banks Listener Error:", error);
     });
 
     return () => unsubscribe();
@@ -974,6 +1001,83 @@ export default function App() {
                             })()}
                           </div>
                         )}
+
+                        {/* V4: Bank Selection */}
+                        <div className="space-y-1">
+                          <label htmlFor="field-bank" className="text-[10px] font-black text-slate-400 uppercase flex items-center justify-between">
+                            <span>Paid From / Bank</span>
+                          </label>
+                          <div className="relative">
+                            <select 
+                              id="field-bank"
+                              disabled={selectedResult.is_verified}
+                              className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100 appearance-none disabled:opacity-60"
+                              value={selectedResult.data?.bank || ''}
+                              onChange={async e => {
+                                if (e.target.value === 'ADD_NEW') {
+                                  const custom = prompt("Enter new bank name:");
+                                  if (custom && custom.trim()) {
+                                    try {
+                                      const teamId = userRole === 'admin' ? 'global' : (userData?.team_id || 'General');
+                                      await axios.post(`${API_URL}/banks`, {
+                                        name: custom.trim(),
+                                        is_builtin: false,
+                                        team_id: teamId
+                                      });
+                                      handleDataChange('bank' as keyof ReceiptData, custom.trim());
+                                    } catch (err: any) {
+                                      console.error("ADD BANK ERROR:", err.response?.data);
+                                      alert(err.response?.data?.error || "Failed to add bank");
+                                    }
+                                  }
+                                } else {
+                                  handleDataChange('bank' as keyof ReceiptData, e.target.value);
+                                }
+                              }}
+                            >
+                              <option value="">Select Bank...</option>
+                              {dbBanks
+                                .sort((a,b) => a.name.localeCompare(b.name))
+                                .map(bank => (
+                                  <option key={bank.id} value={bank.name}>{bank.name}</option>
+                                ))
+                              }
+                              {(userRole === 'admin' || userRole === 'leader') && (
+                                <option value="ADD_NEW" className="text-indigo-600 font-bold">+ Add Custom Bank</option>
+                              )}
+                            </select>
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                              <Plus size={14} />
+                            </div>
+                          </div>
+                          {/* V4: Delete Bank Interaction for Admins/Leaders */}
+                          {(() => {
+                            const selectedBank = dbBanks.find(b => b.name === selectedResult.data?.bank);
+                            if (selectedBank && !selectedBank.is_builtin && (userRole === 'admin' || userRole === 'leader')) {
+                              return (
+                                <button 
+                                  onClick={async () => {
+                                    if (!confirm(`Delete bank "${selectedBank.name}" permanently for everyone in your team?`)) return;
+                                    try {
+                                      const tid = userData?.team_id || "General";
+                                      await axios.delete(`${API_URL}/banks/${selectedBank.id}`, {
+                                        params: { role: userRole, team_id: tid.toLowerCase().trim() }
+                                      });
+                                      handleDataChange('bank' as keyof ReceiptData, '');
+                                    } catch (err: any) {
+                                      console.error("DELETE BANK ERROR:", err.response?.data);
+                                      alert(err.response?.data?.error || "Failed to delete bank");
+                                    }
+                                  }}
+                                  className="text-[10px] font-medium text-slate-400 hover:text-rose-500 uppercase tracking-widest flex items-center gap-1 mt-1 ml-1 transition-colors"
+                                >
+                                  <X size={10} /> Remove Bank
+                                </button>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
                         <div className="pt-4 flex flex-col gap-3">
                           {selectedResult.image_url && (
                             <a href={selectedResult.image_url} target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-slate-100 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
