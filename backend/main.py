@@ -563,30 +563,34 @@ async def export_excel(team_id: Optional[str] = None, user_id: Optional[str] = N
         if not results:
             return {"error": "No completed extractions to export"}
             
-        # Determine target currency (V2)
+        # V2: Aggressive Currency Resolution
+        # 1. Start with provided currency (might be BHD default from frontend)
         target_currency = currency.strip().upper() if currency else "BHD"
         
-        # If no explicit currency provided OR it is still default BHD, try to look up from records/user
-        if (not currency or currency == "BHD") and results:
-            # Check the first doc if it has entity_id
-            first_doc = db.collection("extractions").document(results[0].file_id).get()
-            if first_doc.exists:
-                ent_id = first_doc.to_dict().get("entity_id")
-                if ent_id and ent_id != "default":
-                    ent_doc = db.collection("entities").document(ent_id).get()
-                    if ent_doc.exists:
-                        target_currency = ent_doc.to_dict().get("currency", "BHD")
-                    
-        # Fallback: lookup from user if still no currency found or no results entity
-        if not currency and target_currency == "BHD" and user_id:
+        # 2. If it is BHD, try to find a better one from the actual data being exported
+        if target_currency == "BHD" and results:
+            # Check a few docs to see if they belong to an entity
+            for r in results[:3]:
+                doc = db.collection("extractions").document(r.file_id).get()
+                if doc.exists:
+                    e_id = doc.to_dict().get("entity_id")
+                    if e_id and e_id != "default":
+                        e_doc = db.collection("entities").document(e_id).get()
+                        if e_doc.exists:
+                            target_currency = e_doc.to_dict().get("currency", "BHD")
+                            break # Found one!
+                            
+        # 3. If still BHD, try the logged-in user's assigned entity
+        if target_currency == "BHD" and user_id:
             user_doc = db.collection("users").document(user_id).get()
             if user_doc.exists:
-                u_data = user_doc.to_dict()
-                ent_id = u_data.get("entity_id")
-                if ent_id and ent_id != "default":
-                    ent_doc = db.collection("entities").document(ent_id).get()
-                    if ent_doc.exists:
-                        target_currency = ent_doc.to_dict().get("currency", "BHD")
+                e_id = user_doc.to_dict().get("entity_id")
+                if e_id and e_id != "default":
+                    e_doc = db.collection("entities").document(e_id).get()
+                    if e_doc.exists:
+                        target_currency = e_doc.to_dict().get("currency", "BHD")
+
+        print(f"DEBUG: Final Resolved Currency for Export: {target_currency}")
 
         temp_excel = tempfile.mktemp(suffix=".xlsx")
         generate_petty_cash_log(results, temp_excel, currency=target_currency)
