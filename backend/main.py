@@ -580,9 +580,17 @@ async def export_excel(team_id: Optional[str] = None, user_id: Optional[str] = N
                             target_currency = e_doc.to_dict().get("currency", "BHD")
                             break # Found one!
                             
-        # 3. If still BHD, try the logged-in user's assigned entity
-        if target_currency == "BHD" and user_id:
-            user_doc = db.collection("users").document(user_id).get()
+        # 3. If still BHD, try the logged-in user's assigned entity (or find the leader for this team)
+        lookup_uid = user_id
+        if not lookup_uid and team_id:
+            # Find any user (preferably leader) who belongs to this team
+            team_users = db.collection("users").where("team_id", "==", team_id.lower()).limit(1).stream()
+            for tu in team_users:
+                lookup_uid = tu.id
+                break
+
+        if target_currency == "BHD" and lookup_uid:
+            user_doc = db.collection("users").document(lookup_uid).get()
             if user_doc.exists:
                 e_id = user_doc.to_dict().get("entity_id")
                 if e_id and e_id != "default":
