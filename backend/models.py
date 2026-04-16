@@ -7,7 +7,7 @@ class ReceiptData(BaseModel):
     description: Optional[str] = Field(None, description="Brief description of the expense")
     amount: Optional[float | str] = Field(None, description="Expense amount (debit)")
     deposit_amount: Optional[float | str] = Field(None, description="Deposit amount (credit)")
-    currency: Optional[str] = Field("BHD", description="Currency of the transaction")
+    currency: Optional[str] = Field(None, description="Currency of the transaction")
     received_by: Optional[str] = Field(None, description="Who received the payment (e.g., Biller name)")
     transaction_no: Optional[str] = Field(None, description="Reference or transaction number")
     phone_number: Optional[str] = Field(None, description="Phone number if applicable")

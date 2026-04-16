@@ -452,7 +452,7 @@ async def add_manual(data: Optional[ReceiptData] = None, user_id: Optional[str] 
                 "description": "Opening balance B/F",
                 "amount": None,
                 "deposit_amount": None,
-                "currency": "BHD",
+                "currency": "BHD", # Will be updated below
                 "received_by": "",
                 "transaction_no": "MANUAL",
                 "category": "Deposit",
@@ -460,6 +460,19 @@ async def add_manual(data: Optional[ReceiptData] = None, user_id: Optional[str] 
                 "confidence": 100.0
             }
             
+        # V2 Fix: Inherit currency and entity from the office if it's a manual entry
+        uid_for_ent = user_id or "unknown"
+        inherited_entity_id = "default"
+        if uid_for_ent != "unknown":
+            u_doc = db.collection("users").document(uid_for_ent).get()
+            if u_doc.exists:
+                e_id = u_doc.to_dict().get("entity_id")
+                if e_id and e_id != "default":
+                    inherited_entity_id = e_id
+                    e_doc = db.collection("entities").document(e_id).get()
+                    if e_doc.exists:
+                        data_dict["currency"] = e_doc.to_dict().get("currency", "BHD")
+
         doc_ref = db.collection("extractions").add({
             "name": "Manual Entry",
             "status": "COMPLETED",
@@ -471,7 +484,8 @@ async def add_manual(data: Optional[ReceiptData] = None, user_id: Optional[str] 
                 "leader_verified": True if (role == "admin" or role == "leader") else False,
                 "admin_verified": True if role == "admin" else False,
                 "user_id": user_id,
-                "team_id": team_id
+                "team_id": team_id,
+                "entity_id": inherited_entity_id
             })
         return {"status": "success", "id": doc_ref[1].id}
     except Exception as e:
@@ -552,8 +566,8 @@ async def export_excel(team_id: Optional[str] = None, user_id: Optional[str] = N
         # Determine target currency (V2)
         target_currency = currency.strip().upper() if currency else "BHD"
         
-        # If no explicit currency provided, try to look up from the first result's entity_id
-        if not currency and results:
+        # If no explicit currency provided OR it is still default BHD, try to look up from records/user
+        if (not currency or currency == "BHD") and results:
             # Check the first doc if it has entity_id
             first_doc = db.collection("extractions").document(results[0].file_id).get()
             if first_doc.exists:
