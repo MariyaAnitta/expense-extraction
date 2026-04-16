@@ -383,6 +383,8 @@ export default function App() {
       if (userData?.team_id) formData.append('team_id', userData.team_id);
       else formData.append('team_id', 'General');
       
+      if (userData?.entity_id) formData.append('entity_id', userData.entity_id);
+      
       await axios.post(`${API_URL}/upload-batch`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
@@ -633,11 +635,11 @@ export default function App() {
       <div className="lg:pl-20 flex-1 flex flex-col min-h-screen">
         <header className="h-20 bg-[#F5F2EA]/80 backdrop-blur-md border-b border-slate-200/60 flex items-center justify-between px-8 sticky top-0 z-40">
           <div className="flex flex-col">
-            <h1 className="text-xl font-display font-bold text-slate-800 tracking-tight">Expense Intelligence</h1>
+            <h1 className="text-xl font-display font-bold text-slate-800 tracking-tight">10xDS Expense Intelligence</h1>
             <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-0.5">
               <span>Portal</span>
               <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
-              <span>Exponential Digital Solutions</span>
+              <span>Premium Finance Automation</span>
             </div>
           </div>
 

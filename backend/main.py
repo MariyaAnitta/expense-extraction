@@ -211,7 +211,8 @@ async def upload_batch(
     background_tasks: BackgroundTasks, 
     files: List[UploadFile] = File(...),
     user_id: str = Form("unknown"),
-    team_id: str = Form("General")
+    team_id: str = Form("General"),
+    entity_id: str = Form("default")
 ):
     """Save multiple files to TEMPORARY local storage for processing"""
     uploaded_ids = []
@@ -230,6 +231,7 @@ async def upload_batch(
                 "upload_time": time.time(),
                 "user_id": user_id,
                 "team_id": team_id,
+                "entity_id": entity_id,
                 "is_verified": False,
                 "data": None
             })
@@ -268,7 +270,8 @@ async def upload_automation(
     background_tasks: BackgroundTasks, 
     x_filename: str = Header(None),
     x_team_id: Optional[str] = Header(None),
-    x_user_id: Optional[str] = Header(None)
+    x_user_id: Optional[str] = Header(None),
+    x_entity_id: Optional[str] = Header(None)
 ):
     """Special endpoint for Power Automate to send raw binary OR Base64 JSON."""
     try:
@@ -277,6 +280,7 @@ async def upload_automation(
         # Use headers if provided, otherwise default to generic automation
         team_id = x_team_id or "Global"
         user_id = x_user_id or "automation"
+        entity_id = x_entity_id or "default"
         
         if "application/json" in content_type:
             # Case 1: JSON with Base64 Content
@@ -287,6 +291,7 @@ async def upload_automation(
             # Allow JSON body to override headers if needed
             team_id = data.get("team_id") or team_id
             user_id = data.get("user_id") or user_id
+            entity_id = data.get("entity_id") or entity_id
             
             if not base64_file:
                 return {"status": "error", "message": "JSON body must have 'file' key with base64 string"}
@@ -326,6 +331,7 @@ async def upload_automation(
             "upload_time": time.time(),
             "user_id": user_id,
             "team_id": team_id,
+            "entity_id": entity_id,
             "is_verified": False,
             "data": None
         })
@@ -546,8 +552,19 @@ async def export_excel(team_id: Optional[str] = None, user_id: Optional[str] = N
         # Determine target currency (V2)
         target_currency = currency.strip().upper() if currency else "BHD"
         
-        # If no explicit currency provided, try to look up from user entity
-        if not currency and user_id:
+        # If no explicit currency provided, try to look up from the first result's entity_id
+        if not currency and results:
+            # Check the first doc if it has entity_id
+            first_doc = db.collection("extractions").document(results[0].file_id).get()
+            if first_doc.exists:
+                ent_id = first_doc.to_dict().get("entity_id")
+                if ent_id and ent_id != "default":
+                    ent_doc = db.collection("entities").document(ent_id).get()
+                    if ent_doc.exists:
+                        target_currency = ent_doc.to_dict().get("currency", "BHD")
+                    
+        # Fallback: lookup from user if still no currency found or no results entity
+        if not currency and target_currency == "BHD" and user_id:
             user_doc = db.collection("users").document(user_id).get()
             if user_doc.exists:
                 u_data = user_doc.to_dict()

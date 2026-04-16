@@ -12,6 +12,7 @@ interface UserData {
   email: string;
   role: string;
   team_id: string;
+  entity_id?: string;
   status: string;
   created_at: number;
 }
@@ -557,6 +558,7 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
             <tr className="bg-slate-50/50">
               <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Member</th>
               <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Role & Scope</th>
+              <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Entity</th>
               <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Status</th>
               <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100 text-right">Oversight</th>
             </tr>
@@ -593,6 +595,13 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
                         {u.role}
                       </span>
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Team: {u.team_id}</span>
+                    </div>
+                  </td>
+                  <td className="px-8 py-5">
+                    <div className="flex flex-col">
+                        <span className="text-xs font-bold text-slate-700">
+                           {entities.find(e => e.id === u.entity_id)?.name || u.entity_id || '---'}
+                        </span>
                     </div>
                   </td>
                   <td className="px-8 py-5">

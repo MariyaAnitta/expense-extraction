@@ -6,8 +6,10 @@ We have successfully transformed the Expense Automation Portal into a **Multi-Te
 *   **Global Multi-Entity Registration**: Admins can now register multiple corporate entities (e.g., branches, subsidiaries) with independent configurations.
 *   **REST Countries API Integration**: Automatic population of country-specific data during registration.
 *   **Multi-Currency Support**: Dashboards, AI extractions, and Excel exports now dynamically adapt to the entity's base currency (e.g., INR, BHD, USD, etc.).
-*   **Enhanced Entity CRUD**: Full management suite for Admins to List, Edit, and Delete corporate entities directly from the UI.
-*   **Optimized Manual Entries**: Specialized "Opening Balance B/F" flow with auto-locking verification fields for data integrity.
+*   **🏦 Bank Registry System**: Implemented a team-scoped bank management system with real-time Firestore synchronization and RBAC protection.
+*   **🌍 Multi-Entity Automation Scoping**: Added `X-Entity-ID` support to Power Automate flows, ensuring perfect data isolation across different country branches.
+*   **🎨 Brand Evolution**: Successfully rebranded the portal as the **10xDS Expense Intelligence Portal** for a premium enterprise feel.
+*   **🛡️ Multi-Entity Oversight**: Added entity tracking to the Admin dashboard for clearer user management.
 
 ---
 
