@@ -683,7 +683,7 @@ export default function App() {
 
         <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
           {currentView === 'analytics' ? (
-            <Analytics data={queue} userRole={userRole} />
+            <Analytics data={queue} userRole={userRole} currency={userCurrency} />
           ) : (currentView === 'admin' || currentView === 'team') ? (
             <TeamManagement userRole={userRole} userTeam={userData?.team_id} onViewDashboard={handleViewUserDashboard} />
           ) : (

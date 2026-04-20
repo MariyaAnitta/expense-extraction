@@ -21,11 +21,12 @@ interface ExtractionResult {
 interface AnalyticsProps {
   data: ExtractionResult[];
   userRole: string | null;
+  currency?: string;
 }
 
 const COLORS = ['#6366f1', '#10b981', '#f43f5e', '#f59e0b', '#8b5cf6'];
 
-export default function Analytics({ data, userRole }: AnalyticsProps) {
+export default function Analytics({ data, userRole, currency = 'BHD' }: AnalyticsProps) {
   // Only use verified data for analytics to ensure accuracy
   const verifiedData = useMemo(() => data.filter(item => item.is_verified && item.data), [data]);
 
@@ -118,7 +119,7 @@ export default function Analytics({ data, userRole }: AnalyticsProps) {
             <div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{s.label}</p>
               <h3 className="text-2xl font-bold text-slate-800 mt-1">{s.value.toFixed(3)}</h3>
-              <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">BHD Currency</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">{currency} Currency</p>
             </div>
             <div className={`w-12 h-12 ${s.bg} rounded-2xl flex items-center justify-center ${s.color} group-hover:scale-110 transition-transform`}>
               <s.icon size={24} />
@@ -199,7 +200,7 @@ export default function Analytics({ data, userRole }: AnalyticsProps) {
               {categoryData.slice(0, 3).map((cat, idx) => (
                 <div key={idx} className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-600">{cat.name}</span>
-                  <span className="text-xs font-black text-slate-800">{cat.value.toFixed(2)} BHD</span>
+                  <span className="text-xs font-black text-slate-800">{cat.value.toFixed(2)} {currency}</span>
                 </div>
               ))}
             </div>
