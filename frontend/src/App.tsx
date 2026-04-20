@@ -182,7 +182,18 @@ export default function App() {
   // Sync selected results with background updates
   useEffect(() => {
     if (selectedResult) {
-       const latest = queue.find(item => item.file_id === selectedResult.file_id);
+       // First try matching by exact file_id
+       let latest = queue.find(item => item.file_id === selectedResult.file_id);
+       
+       // If selected item is a temp placeholder, try to find the real Firestore item by file_name
+       if (!latest && selectedResult.file_id.startsWith('temp-')) {
+         latest = queue.find(item => 
+           !item.file_id.startsWith('temp-') && 
+           (item.file_name === selectedResult.file_name || 
+            item.file_name?.includes(selectedResult.file_name?.split('/').pop() || '___'))
+         );
+       }
+       
        if (latest && JSON.stringify(latest) !== JSON.stringify(selectedResult)) {
          setSelectedResult(latest);
        }
