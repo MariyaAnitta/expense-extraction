@@ -696,7 +696,7 @@ export default function App() {
           {currentView === 'analytics' ? (
             <Analytics data={queue} userRole={userRole} currency={userCurrency} />
           ) : (currentView === 'admin' || currentView === 'team') ? (
-            <TeamManagement userRole={userRole} userTeam={userData?.team_id} onViewDashboard={handleViewUserDashboard} />
+            <TeamManagement userRole={userRole} userTeam={userData?.team_id} userEntity={userData?.entity_id} onViewDashboard={handleViewUserDashboard} />
           ) : (
             <>
               <div className="grid grid-cols-3 gap-6">

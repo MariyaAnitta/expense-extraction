@@ -20,6 +20,7 @@ interface UserData {
 interface TeamManagementProps {
   userRole: string | null;
   userTeam: string | null;
+  userEntity?: string | null;
   onViewDashboard: (uid: string, email: string, team_id: string) => void;
 }
 
@@ -29,7 +30,7 @@ interface CountryData {
   symbol: string;
 }
 
-export default function TeamManagement({ userRole, userTeam, onViewDashboard }: TeamManagementProps) {
+export default function TeamManagement({ userRole, userTeam, userEntity, onViewDashboard }: TeamManagementProps) {
   const [users, setUsers] = useState<UserData[]>([]);
   const [entities, setEntities] = useState<any[]>([]);
   const [countries, setCountries] = useState<CountryData[]>([]);
@@ -90,8 +91,10 @@ export default function TeamManagement({ userRole, userTeam, onViewDashboard }: 
         setUsers(allUsers);
       } else {
         const normalizedTeam = (userTeam || 'General').toLowerCase();
+        // V4 Fix: Only show members who share BOTH your Team ID AND your Entity ID
         const teamMembers = allUsers.filter(u => 
-          (u.team_id?.toLowerCase() === normalizedTeam)
+          u.team_id?.toLowerCase() === normalizedTeam && 
+          u.entity_id === userEntity
         ).sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
         setUsers(teamMembers);
       }
