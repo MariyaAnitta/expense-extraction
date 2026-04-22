@@ -12,6 +12,7 @@ from excel_exporter import generate_petty_cash_log
 from models import ExtractionResult, ReceiptData
 from dotenv import load_dotenv
 from supabase import create_client, Client
+import httpx
 
 # Load from specific backend folder
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -97,6 +98,33 @@ async def debug_supabase():
 
 import asyncio
 
+def get_entity_currency(entity_id: str) -> str:
+    """Fetch the base currency for an entity from Firestore"""
+    if not entity_id or entity_id == "default":
+        return "BHD"
+    try:
+        doc = db.collection("entities").document(entity_id).get()
+        if doc.exists:
+            return doc.to_dict().get("currency", "BHD")
+    except Exception as e:
+        print(f"Error fetching entity currency: {e}")
+    return "BHD"
+
+async def get_exchange_rate(from_curr: str, to_curr: str) -> float:
+    """Fetch live exchange rate from API"""
+    if not from_curr or not to_curr or from_curr.upper() == to_curr.upper():
+        return 1.0
+    try:
+        url = f"https://api.exchangerate-api.com/v4/latest/{from_curr.upper()}"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, timeout=5)
+            if response.status_code == 200:
+                rates = response.json().get("rates", {})
+                return float(rates.get(to_curr.upper(), 1.0))
+    except Exception as e:
+        print(f"FX API Error ({from_curr}->{to_curr}): {e}")
+    return 1.0
+
 async def run_batch_processor():
     """Background task to process queued files (Local Disk -> Extract -> Delete)"""
     print("Zero-Bucket Background processor started...")
@@ -179,14 +207,43 @@ async def run_batch_processor():
                 except Exception as upload_err:
                     print(f"Supabase Upload Failed for {file_name}: {upload_err}")
             
-            # 3. Update Firestore with all data + the new image_url
+            # 3. FX Calculation: Convert extracted currency to Entity Base Currency
+            # Ensure we use the correct entity_id resolved earlier OR fallback to document's entity_id
+            final_ent_id = target_ent_id or data.get("entity_id") or "default"
+            target_currency = get_entity_currency(final_ent_id)
+            rate = 1.0
+            base_amount = 0.0
+            
+            if result.data:
+                orig_currency = result.data.currency or target_currency
+                rate = await get_exchange_rate(orig_currency, target_currency)
+                
+                # Calculate base amount
+                orig_amount = 0.0
+                try:
+                    if result.data.category == "Deposit":
+                        orig_amount = float(result.data.deposit_amount or 0)
+                    else:
+                        orig_amount = float(result.data.amount or 0)
+                except:
+                    pass
+                
+                base_amount = orig_amount * rate
+                
+                # Update the model data
+                result.data.target_currency = target_currency
+                result.data.exchange_rate = rate
+                result.data.base_amount = base_amount
+                result.data.base_currency = target_currency # For consistency
+            
+            # 4. Update Firestore with all data + image_url + FX data
             update_data = {
                 "status": result.status,
                 "confidence": result.data.confidence if result.data else 0,
                 "data": result.data.model_dump() if result.data else None,
                 "error": result.error,
                 "image_url": image_url,
-                "temp_local_path": None # Clear from DB
+                "temp_local_path": None 
             }
             db.collection("extractions").document(doc_id).update(update_data)
             
@@ -460,29 +517,46 @@ async def add_manual(data: Optional[ReceiptData] = None, user_id: Optional[str] 
                 "confidence": 100.0
             }
             
-        # V2 Fix: Inherit currency and entity from the office if it's a manual entry
+        # V2/V4 Fix: Inherit currency and entity from the office if it's a manual entry
         uid_for_ent = user_id or "unknown"
         inherited_entity_id = "default"
+        target_currency = "BHD"
+        
         if uid_for_ent != "unknown":
             u_doc = db.collection("users").document(uid_for_ent).get()
             if u_doc.exists:
                 e_id = u_doc.to_dict().get("entity_id")
                 if e_id and e_id != "default":
                     inherited_entity_id = e_id
-                    e_doc = db.collection("entities").document(e_id).get()
-                    if e_doc.exists:
-                        data_dict["currency"] = e_doc.to_dict().get("currency", "BHD")
+                    target_currency = get_entity_currency(e_id)
+                    if not data: # Only set default currency if it's a blank manual entry
+                        data_dict["currency"] = target_currency
+
+        # V4: Fill FX data for manual entries
+        orig_currency = data_dict.get("currency", target_currency)
+        data_dict["target_currency"] = target_currency
+        
+        # If the user didn't provide a rate, fetch it
+        if not data_dict.get("exchange_rate") or data_dict.get("exchange_rate") == 1.0:
+            data_dict["exchange_rate"] = await get_exchange_rate(orig_currency, target_currency)
+        
+        # Calculate base amount
+        try:
+            orig_amt = float(data_dict.get("deposit_amount") or data_dict.get("amount") or 0)
+            data_dict["base_amount"] = orig_amt * data_dict["exchange_rate"]
+        except:
+            data_dict["base_amount"] = 0.0
 
         doc_ref = db.collection("extractions").add({
-            "name": "Manual Entry",
+            "name": data_dict.get("description", "Manual Entry") if data else "Manual Entry",
             "status": "COMPLETED",
             "data": data_dict,
             "upload_time": time.time(),
             "local_path": None, # No file for manual entries
-                "is_verified": True if (role == "admin" or role == "leader") else False,
-                "user_verified": True,
-                "leader_verified": True if (role == "admin" or role == "leader") else False,
-                "admin_verified": True if role == "admin" else False,
+            "is_verified": True if (role == "admin" or role == "leader") else False,
+            "user_verified": True,
+            "leader_verified": True if (role == "admin" or role == "leader") else False,
+            "admin_verified": True if role == "admin" else False,
                 "user_id": user_id,
                 "team_id": team_id,
                 "entity_id": inherited_entity_id
@@ -563,40 +637,39 @@ async def export_excel(team_id: Optional[str] = None, user_id: Optional[str] = N
         if not results:
             return {"error": "No completed extractions to export"}
             
-        # V2: Aggressive Currency Resolution
-        # 1. Start with provided currency (might be BHD default from frontend)
-        target_currency = currency.strip().upper() if currency else "BHD"
+        # V2/V4: Strategic Currency Resolution
+        # 1. Start with provided currency if valid
+        target_currency = currency.strip().upper() if (currency and currency.strip()) else None
         
-        # 2. If it is BHD, try to find a better one from the actual data being exported
-        if target_currency == "BHD" and results:
-            # Check a few docs to see if they belong to an entity
-            for r in results[:3]:
-                doc = db.collection("extractions").document(r.file_id).get()
-                if doc.exists:
-                    e_id = doc.to_dict().get("entity_id")
+        # 2. If no currency provided, resolve from the entity of the first result
+        if not target_currency and results:
+            for r in results[:10]: # Check first few to find an entity_id
+                # Note: r is an ExtractionResult object
+                ex_doc = db.collection("extractions").document(r.file_id).get()
+                if ex_doc.exists:
+                    e_id = ex_doc.to_dict().get("entity_id")
                     if e_id and e_id != "default":
-                        e_doc = db.collection("entities").document(e_id).get()
-                        if e_doc.exists:
-                            target_currency = e_doc.to_dict().get("currency", "BHD")
-                            break # Found one!
-                            
-        # 3. If still BHD, try the logged-in user's assigned entity (or find the leader for this team)
-        lookup_uid = user_id
-        if not lookup_uid and team_id:
-            # Find any user (preferably leader) who belongs to this team
-            team_users = db.collection("users").where("team_id", "==", team_id.lower()).limit(1).stream()
-            for tu in team_users:
-                lookup_uid = tu.id
-                break
+                        target_currency = get_entity_currency(e_id)
+                        break
+        
+        # 3. Fallback to lookup based on user or team
+        if not target_currency:
+            lookup_uid = user_id
+            if not lookup_uid and team_id:
+                leaders = db.collection("users").where("team_id", "==", team_id.lower()).where("role", "==", "leader").limit(1).stream()
+                for l in leaders:
+                    lookup_uid = l.id
+                    break
+            
+            if lookup_uid:
+                u_doc = db.collection("users").document(lookup_uid).get()
+                if u_doc.exists:
+                    e_id = u_doc.to_dict().get("entity_id")
+                    target_currency = get_entity_currency(e_id)
 
-        if target_currency == "BHD" and lookup_uid:
-            user_doc = db.collection("users").document(lookup_uid).get()
-            if user_doc.exists:
-                e_id = user_doc.to_dict().get("entity_id")
-                if e_id and e_id != "default":
-                    e_doc = db.collection("entities").document(e_id).get()
-                    if e_doc.exists:
-                        target_currency = e_doc.to_dict().get("currency", "BHD")
+        # 4. Final safety default
+        if not target_currency:
+            target_currency = "BHD"
 
         print(f"DEBUG: Final Resolved Currency for Export: {target_currency}")
 

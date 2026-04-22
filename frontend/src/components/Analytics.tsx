@@ -10,6 +10,7 @@ interface ReceiptData {
   amount: number | string | null;
   deposit_amount: number | string | null;
   category?: string;
+  base_amount?: number;
 }
 
 interface ExtractionResult {
@@ -38,13 +39,12 @@ export default function Analytics({ data, userRole, currency = 'BHD' }: Analytic
     verifiedData.forEach(item => {
       const d = item.data;
       if (!d) return;
-      const amt = parseFloat(String(d.amount || 0));
-      const dep = parseFloat(String(d.deposit_amount || 0));
+      const baseAmt = parseFloat(String(d.base_amount || 0));
       
       if (d.category === 'Deposit') {
-        totalDeposits += (dep || amt);
+        totalDeposits += baseAmt;
       } else {
-        totalExpenses += amt;
+        totalExpenses += baseAmt;
       }
     });
 
@@ -72,13 +72,12 @@ export default function Analytics({ data, userRole, currency = 'BHD' }: Analytic
       if (isNaN(dateObj.getTime())) return;
       
       const monthLabel = months[dateObj.getMonth()];
-      const amt = parseFloat(String(d.amount || 0));
-      const dep = parseFloat(String(d.deposit_amount || 0));
+      const baseAmt = parseFloat(String(d.base_amount || 0));
 
       if (d.category === 'Deposit') {
-        monthlyMap[monthLabel].deposits += (dep || amt);
+        monthlyMap[monthLabel].deposits += baseAmt;
       } else {
-        monthlyMap[monthLabel].expenses += amt;
+        monthlyMap[monthLabel].expenses += baseAmt;
       }
     });
 
@@ -90,7 +89,9 @@ export default function Analytics({ data, userRole, currency = 'BHD' }: Analytic
     const caps: Record<string, number> = {};
     verifiedData.forEach(item => {
       if (item.data?.category && item.data.category !== 'Deposit') {
-        caps[item.data.category] = (caps[item.data.category] || 0) + parseFloat(String(item.data.amount || 0));
+        const baseAmt = parseFloat(String(item.data.base_amount || 0));
+        const subType = (item.data as any).sub_type || 'Other';
+        caps[subType] = (caps[subType] || 0) + baseAmt;
       }
     });
     return Object.entries(caps).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);

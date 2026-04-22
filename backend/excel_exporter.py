@@ -105,9 +105,9 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
             if not result.data: continue
             d = result.data
             
-            # Add to balance
-            dep = safe_float(d.deposit_amount)
-            exp = safe_float(d.amount)
+            # V4: Use base_amount for ledger calculations (ensuring consistent balance)
+            dep = safe_float(d.base_amount if d.category == "Deposit" else 0)
+            exp = safe_float(d.base_amount if d.category != "Deposit" else 0)
             running_balance = running_balance + dep - exp
             
             # VALUES ONLY — Let the template handle alignment/styling
@@ -136,23 +136,26 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
                 ws.cell(row=row_idx, column=3, value="")
                 ws.cell(row=row_idx, column=4, value=str(sub_type))
 
+            # Main Columns (Functional Currency)
             if dep != 0: 
-                c = ws.cell(row=row_idx, column=5, value=dep) # Shifted to 5
-                # Apply format only if not already set or specifically needed
-                if "0.000" not in (c.number_format or ""):
-                    c.number_format = f'{currency} #,##0.000'
+                c = ws.cell(row=row_idx, column=5, value=dep) 
+                c.number_format = f'{currency} #,##0.000'
             if exp != 0: 
-                c = ws.cell(row=row_idx, column=6, value=exp) # Shifted to 6
-                if "0.000" not in (c.number_format or ""):
-                    c.number_format = f'{currency} #,##0.000'
+                c = ws.cell(row=row_idx, column=6, value=exp) 
+                c.number_format = f'{currency} #,##0.000'
             
             rb = d.received_by or ""
-            ws.cell(row=row_idx, column=7, value=str(rb)) # Shifted to 7
+            ws.cell(row=row_idx, column=7, value=str(rb)) 
             
-            c_bal = ws.cell(row=row_idx, column=8, value=running_balance) # Shifted to 8
-            if "0.000" not in (c_bal.number_format or ""):
-                c_bal.number_format = f'{currency} #,##0.000'
-            ws.cell(row=row_idx, column=9, value=str(d.remarks or "ok")) # Shifted to 9
+            c_bal = ws.cell(row=row_idx, column=8, value=running_balance) 
+            c_bal.number_format = f'{currency} #,##0.000'
+            ws.cell(row=row_idx, column=9, value=str(d.remarks or "ok")) 
+
+            # V4 Audit Trail: Original Currency Columns
+            orig_amt = safe_float(d.deposit_amount if d.category == "Deposit" else d.amount)
+            ws.cell(row=row_idx, column=10, value=orig_amt)
+            ws.cell(row=row_idx, column=11, value=str(d.currency or currency))
+            ws.cell(row=row_idx, column=12, value=safe_float(d.exchange_rate))
             
             row_idx += 1
         except Exception as e:

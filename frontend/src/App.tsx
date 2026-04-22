@@ -40,6 +40,11 @@ interface ReceiptData {
   sub_type?: string;
   bank?: string;
   confidence: number;
+  // V4: Multi-Currency
+  target_currency?: string;
+  exchange_rate?: number;
+  base_amount?: number;
+  is_manual_rate?: boolean;
 }
 
 interface ExtractionResult {
@@ -93,6 +98,21 @@ const StatCard = ({ icon: Icon, label, value, subtext, trend, colorClass }: { ic
     )}
   </div>
 );
+
+// Multi-Currency FX Lookup Helper
+// Multi-Currency FX Lookup Helper
+const getLiveExchangeRate = async (from: string, to: string) => {
+  if (!from || !to || from.toUpperCase() === to.toUpperCase()) return 1.0;
+  try {
+    const res = await axios.get(`https://api.exchangerate-api.com/v4/latest/${from.toUpperCase()}`);
+    return res.data.rates[to.toUpperCase()] || 1.0;
+  } catch (err) {
+    console.error("FX Lookup failed", err);
+    return 1.0;
+  }
+};
+
+const SUPPORTED_CURRENCIES = ['BHD', 'SAR', 'USD', 'INR', 'EUR', 'GBP', 'AED', 'KWD', 'OMR', 'QAR'];
 
 export default function App() {
   const [authUser, setAuthUser] = useState<User | null>(null);
@@ -462,7 +482,12 @@ export default function App() {
         category: "Deposit",
         remarks: "ok",
         sub_type: "Opening Balance",
-        confidence: 100
+        confidence: 100,
+        // V4: Multi-Currency Defaults
+        target_currency: userCurrency,
+        exchange_rate: 1.0,
+        base_amount: 0.0,
+        is_manual_rate: false
       }
     }, ...prev]);
   };
@@ -587,6 +612,20 @@ export default function App() {
         }
       } catch (e) {}
       updatedResult.file_name = `Manual Entry - ${displayDate}`;
+    }
+
+    // V4 FX Calculation Logic
+    if (['currency', 'target_currency', 'amount', 'deposit_amount', 'exchange_rate'].includes(key)) {
+      const rate = Number(newData.exchange_rate) || 1.0;
+      const amt = Number(newData.amount || newData.deposit_amount || 0);
+      newData.base_amount = amt * rate;
+
+      // If currency changed, trigger an async rate update if not manual
+      if ((key === 'currency' || key === 'target_currency') && !newData.is_manual_rate) {
+        getLiveExchangeRate(newData.currency || 'BHD', newData.target_currency || userCurrency || 'BHD').then(newRate => {
+          handleDataChange('exchange_rate', newRate);
+        });
+      }
     }
 
     setSelectedResult(updatedResult);
@@ -769,13 +808,14 @@ export default function App() {
                           <tr>
                             <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Document</th>
                             <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Status</th>
+                            <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Amount</th>
                             <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100">Confidence</th>
                             <th className="px-8 py-4 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100 text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {queue.length === 0 ? (
-                            <tr><td colSpan={4} className="py-20 text-center text-slate-400">No documents in queue.</td></tr>
+                            <tr><td colSpan={5} className="py-20 text-center text-slate-400">No documents in queue.</td></tr>
                           ) : (
                             queue.map((item) => (
                               <tr key={item.file_id} onClick={() => setSelectedResult(item)} className={cn("cursor-pointer hover:bg-slate-50", selectedResult?.file_id === item.file_id && "bg-indigo-50/30")}>
@@ -785,13 +825,13 @@ export default function App() {
                                       <FileText size={20} />
                                     </div>
                                     <div className="flex flex-col">
-                                      <span className="font-bold text-slate-800 text-sm truncate max-w-[180px]">{item.file_name}</span>
+                                      <span className="font-bold text-slate-800 text-sm truncate max-w-[150px]">{item.file_name}</span>
                                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{item.file_name.split('.').pop() || 'File'}</span>
                                     </div>
                                   </div>
                                 </td>
                                 <td className="px-8 py-4">
-                                  <div className="flex items-center gap-1.5 min-w-[150px]">
+                                  <div className="flex items-center gap-1.5">
                                     <div className={cn(
                                       "px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all text-nowrap",
                                       item.user_verified 
@@ -817,6 +857,22 @@ export default function App() {
                                       Leader
                                     </div>
                                   </div>
+                                </td>
+                                <td className="px-8 py-4">
+                                  {item.data ? (
+                                    <div className="flex flex-col">
+                                      <span className="text-sm font-black text-slate-800">
+                                        {Number(item.data.amount || item.data.deposit_amount || 0).toFixed(2)} <span className="text-[10px] text-slate-400 font-bold">{item.data.currency}</span>
+                                      </span>
+                                      {item.data.currency !== item.data.target_currency && (
+                                        <span className="text-[10px] font-black text-indigo-600 uppercase tracking-tight">
+                                          ≈ {Number(item.data.base_amount || 0).toFixed(3)} {item.data.target_currency}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest italic">Extracting...</span>
+                                  )}
                                 </td>
                                 <td className="px-8 py-4">
                                   {item.data?.confidence ? (
@@ -869,12 +925,10 @@ export default function App() {
                           { label: 'Date', key: 'date', type: 'date' },
                           { label: 'Type', key: 'category', type: 'select', options: ['Expense', 'Deposit'] },
                           { label: 'Description', key: 'description', type: 'textarea' },
-                          { label: 'Amount', key: 'amount', type: 'number' },
+                          // V4: Amount and Currency are now grouped below
                           { label: 'Remarks', key: 'remarks', type: 'text' }
                         ].map(field => {
-                          // REFINED LOCKING: Users can edit until the Leader (is_verified) confirms it.
-                          // Leaders/Admins can edit until THEY confirm it (is_verified).
-                          const isLocked = selectedResult.is_verified; 
+                          const isLocked = !!selectedResult.is_verified; 
                           
                           return (
                             <div key={field.key} className="space-y-1">
@@ -885,7 +939,7 @@ export default function App() {
                                   readOnly={isLocked}
                                   className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100 disabled:opacity-60" 
                                   rows={2} 
-                                  value={selectedResult.data?.[field.key as keyof ReceiptData] || ''} 
+                                  value={(selectedResult.data?.[field.key as keyof ReceiptData] as string) || ''} 
                                   onChange={e => handleDataChange(field.key as keyof ReceiptData, e.target.value)} 
                                 />
                               ) : field.type === 'select' ? (
@@ -893,7 +947,7 @@ export default function App() {
                                   id={`field-${field.key}`}
                                   disabled={isLocked}
                                   className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100 disabled:opacity-60" 
-                                  value={selectedResult.data?.[field.key as keyof ReceiptData] || 'Expense'} 
+                                  value={(selectedResult.data?.[field.key as keyof ReceiptData] as string) || 'Expense'} 
                                   onChange={e => handleDataChange(field.key as keyof ReceiptData, e.target.value)}
                                 >
                                   {field.options?.map(o => <option key={o} value={o}>{o}</option>)}
@@ -902,32 +956,96 @@ export default function App() {
                                 <div className="relative">
                                   <input 
                                     id={`field-${field.key}`}
-                                    type={field.type === 'number' ? 'text' : field.type} 
+                                    type={field.type} 
                                     readOnly={isLocked}
-                                    inputMode={field.type === 'number' ? 'decimal' : undefined}
                                     className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100 disabled:opacity-60" 
-                                    value={
-                                      field.key === 'amount' 
-                                        ? (selectedResult.data?.amount ?? selectedResult.data?.deposit_amount ?? '') 
-                                        : (selectedResult.data?.[field.key as keyof ReceiptData] ?? '')
-                                    } 
-                                    onChange={e => {
-                                      const actualKey = (field.key === 'amount' && selectedResult.data?.category === 'Deposit') 
-                                        ? 'deposit_amount' 
-                                        : (field.key as keyof ReceiptData);
-                                      handleDataChange(actualKey, e.target.value);
-                                    }} 
+                                    value={(selectedResult.data?.[field.key as keyof ReceiptData] as string) || ''} 
+                                    onChange={e => handleDataChange(field.key as keyof ReceiptData, e.target.value)} 
                                   />
-                                  {field.key === 'amount' && (
-                                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest pointer-events-none">{userCurrency}</span>
-                                  )}
                                 </div>
                               )}
                             </div>
                           );
                         })}
 
-                        {/* V2: Dynamic Sub-Types (Hidden for Opening Balance) */}
+                        {/* V4: Grouped Amount & Currency */}
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="col-span-2 space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 uppercase">Original Amount</label>
+                            <input 
+                              type="text" 
+                              readOnly={!!selectedResult.is_verified}
+                              inputMode="decimal"
+                              className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100"
+                              value={selectedResult.data?.category === 'Deposit' ? (selectedResult.data?.deposit_amount || '') : (selectedResult.data?.amount || '')}
+                              onChange={e => handleDataChange(selectedResult.data?.category === 'Deposit' ? 'deposit_amount' : 'amount', e.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Currency</label>
+                            <select 
+                              disabled={!!selectedResult.is_verified}
+                              className="w-full bg-indigo-50/50 text-indigo-600 rounded-xl p-3 text-sm font-black outline-none border-none focus:ring-2 ring-indigo-100"
+                              value={selectedResult.data?.currency || 'BHD'}
+                              onChange={e => handleDataChange('currency', e.target.value)}
+                            >
+                              {SUPPORTED_CURRENCIES.map(curr => <option key={curr} value={curr}>{curr}</option>)}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* V4: Multi-Currency Snapshot Section */}
+                        <div className="p-5 bg-slate-50 rounded-3xl space-y-4 border border-slate-100">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Exchange Rate Snapshot</h4>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] font-bold text-slate-400 italic">Manual Rate</span>
+                              <input 
+                                type="checkbox" 
+                                checked={!!selectedResult.data?.is_manual_rate}
+                                onChange={e => handleDataChange('is_manual_rate', e.target.checked)}
+                                className="w-3 h-3 accent-indigo-600"
+                              />
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <label className="text-[9px] font-bold text-slate-400 uppercase">Target Currency</label>
+                              <select 
+                                disabled={!!selectedResult.is_verified}
+                                className="w-full bg-white rounded-lg p-2 text-xs font-bold border-none outline-none ring-1 ring-slate-100"
+                                value={selectedResult.data?.target_currency || userCurrency}
+                                onChange={e => handleDataChange('target_currency', e.target.value)}
+                              >
+                                {SUPPORTED_CURRENCIES.map(curr => <option key={curr} value={curr}>{curr}</option>)}
+                              </select>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[9px] font-bold text-slate-400 uppercase">Exchange Rate</label>
+                              <input 
+                                type="text"
+                                readOnly={!!selectedResult.is_verified}
+                                className="w-full bg-white rounded-lg p-2 text-xs font-bold border-none outline-none ring-1 ring-slate-100"
+                                value={selectedResult.data?.exchange_rate || '1.0'}
+                                onChange={e => {
+                                  handleDataChange('exchange_rate', e.target.value);
+                                  handleDataChange('is_manual_rate', true); // Auto-flag as manual if typed
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-500">Converted Amount:</span>
+                            <span className="text-lg font-black text-indigo-600">
+                              {Number(selectedResult.data?.base_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                              <span className="ml-1 text-xs">{selectedResult.data?.target_currency || userCurrency}</span>
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* V2: Dynamic Sub-Types */}
                         {!(selectedResult.data?.description?.trim().toLowerCase().includes('opening balance')) && (
                           <div className="space-y-1">
                             <label htmlFor="field-subtype" className="text-[10px] font-black text-slate-400 uppercase flex items-center justify-between">
