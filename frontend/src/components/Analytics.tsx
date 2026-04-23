@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, Cell
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { TrendingUp, TrendingDown, Wallet, Zap, ShieldCheck } from 'lucide-react';
 
@@ -25,7 +24,6 @@ interface AnalyticsProps {
   currency?: string;
 }
 
-const COLORS = ['#6366f1', '#10b981', '#f43f5e', '#f59e0b', '#8b5cf6'];
 
 export default function Analytics({ data, userRole, currency = 'BHD' }: AnalyticsProps) {
   // Only use verified data for analytics to ensure accuracy
@@ -84,18 +82,6 @@ export default function Analytics({ data, userRole, currency = 'BHD' }: Analytic
     return Object.values(monthlyMap);
   }, [verifiedData]);
 
-  // --- 3. Category Breakdown ---
-  const categoryData = useMemo(() => {
-    const caps: Record<string, number> = {};
-    verifiedData.forEach(item => {
-      if (item.data?.category && item.data.category !== 'Deposit') {
-        const baseAmt = parseFloat(String(item.data.base_amount || 0));
-        const subType = (item.data as any).sub_type || 'Other';
-        caps[subType] = (caps[subType] || 0) + baseAmt;
-      }
-    });
-    return Object.entries(caps).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
-  }, [verifiedData]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -180,32 +166,7 @@ export default function Analytics({ data, userRole, currency = 'BHD' }: Analytic
 
         {/* Side Component */}
         <div className="flex flex-col gap-6">
-          <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm flex-1">
-            <h3 className="text-lg font-bold text-slate-800 mb-6">Expense Categories</h3>
-            <div className="h-[200px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={categoryData} layout="vertical">
-                  <XAxis type="number" hide />
-                  <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 700, fill: '#94a3b8'}} width={80} />
-                  <Tooltip cursor={{fill: 'transparent'}} />
-                  <Bar dataKey="value" radius={[0, 10, 10, 0]} barSize={20}>
-                    {categoryData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            
-            <div className="space-y-4 mt-6">
-              {categoryData.slice(0, 3).map((cat, idx) => (
-                <div key={idx} className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-600">{cat.name}</span>
-                  <span className="text-xs font-black text-slate-800">{cat.value.toFixed(2)} {currency}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* Expense Categories Removed per User Request */}
 
           <div className="bg-indigo-600 p-8 rounded-[3rem] text-white overflow-hidden relative shadow-xl shadow-indigo-200">
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl"></div>

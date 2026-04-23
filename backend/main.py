@@ -512,12 +512,12 @@ async def update_extraction(doc_id: str, data: ReceiptData, role: str = "user"):
         # is_verified is the GLOBAL gate for Excel exports.
         # Only leaders and admins can set it to True.
         
-        if role == "admin" or role == "leader":
+        if role == "leader":
             update_dict["is_verified"] = True
             update_dict["leader_verified"] = True
             update_dict["user_verified"] = True
         else:
-            # General User confirm-only
+            # General User or Admin confirm-only
             update_dict["user_verified"] = True
             update_dict["is_verified"] = False # explicitly keep it false until Leader checks
             
@@ -584,9 +584,9 @@ async def add_manual(data: Optional[ReceiptData] = None, user_id: Optional[str] 
             "data": data_dict,
             "upload_time": time.time(),
             "local_path": None, # No file for manual entries
-            "is_verified": True if (role == "admin" or role == "leader") else False,
+            "is_verified": True if role == "leader" else False,
             "user_verified": True,
-            "leader_verified": True if (role == "admin" or role == "leader") else False,
+            "leader_verified": True if role == "leader" else False,
             "admin_verified": True if role == "admin" else False,
                 "user_id": user_id,
                 "team_id": team_id,

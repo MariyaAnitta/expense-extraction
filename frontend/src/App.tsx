@@ -1267,17 +1267,26 @@ export default function App() {
                               <Eye size={14} /> VIEW ORIGINAL
                             </a>
                           )}
-                          <button 
-                            onClick={handleConfirm}
-                            disabled={selectedResult?.is_verified}
-                            className={cn(
-                              "w-full py-4 rounded-xl font-black text-xs shadow-lg transition-all",
-                              selectedResult?.is_verified
-                                ? "bg-emerald-500 text-white" : "bg-slate-900 text-white hover:bg-black"
-                            )}
-                          >
-                            {selectedResult?.is_verified ? 'VERIFIED' : ((userRole === 'admin' || userRole === 'leader') ? 'APPROVE & VERIFY' : 'CONFIRM DETAILS')}
-                          </button>
+                           {/* Verification Restricted to Leaders for the two-step process */}
+                           {!(userRole === 'admin' && userFilter) && (
+                            <button 
+                              onClick={handleConfirm}
+                              disabled={selectedResult?.is_verified}
+                              className={cn(
+                                "w-full py-4 rounded-xl font-black text-xs shadow-lg transition-all",
+                                selectedResult?.is_verified
+                                  ? "bg-emerald-500 text-white" : "bg-slate-900 text-white hover:bg-black"
+                              )}
+                            >
+                              {selectedResult?.is_verified ? 'VERIFIED' : (userRole === 'leader' ? 'APPROVE & VERIFY' : 'CONFIRM DETAILS')}
+                            </button>
+                           )}
+                           {userRole === 'admin' && userFilter && (
+                             <div className="w-full py-4 bg-slate-100 text-slate-400 rounded-xl font-black text-[10px] text-center uppercase tracking-widest border border-dashed border-slate-200">
+                               Verification Restricted to Team Leaders
+                             </div>
+                           )}
+
                         </div>
                       </div>
                     )}
@@ -1329,8 +1338,8 @@ export default function App() {
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 block">Active Portfolio</label>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {/* Entity Currencies (Locked) */}
-                    {entityCurrencies.map(curr => (
+                    {/* Entity Currencies (Locked & Sanitized Deduplication) */}
+                    {Array.from(new Set(entityCurrencies.map(c => c.trim().toUpperCase()))).map(curr => (
                       <div key={`ent-${curr}`} className="flex items-center justify-between bg-emerald-50/30 px-4 py-3 rounded-2xl border border-emerald-100/30 group">
                         <div className="flex items-center gap-3">
                           <span className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-[10px] font-black shadow-sm border border-emerald-100">{curr}</span>
