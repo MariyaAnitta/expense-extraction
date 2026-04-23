@@ -760,7 +760,7 @@ export default function App() {
               <input type="text" placeholder="Search..." className="w-64 bg-slate-100 border-none rounded-full py-2.5 pl-11 pr-4 text-sm font-semibold outline-none" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
             
-            {(userRole === 'admin' || userRole === 'leader') && (
+            {userRole && (
               <button 
                 onClick={() => setIsCurrencyModalOpen(true)}
                 className="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm group relative"
