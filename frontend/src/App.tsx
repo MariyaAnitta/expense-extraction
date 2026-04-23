@@ -651,6 +651,11 @@ export default function App() {
 
     // V4 FX Calculation Logic
     if (['currency', 'target_currency', 'amount', 'deposit_amount', 'exchange_rate'].includes(key)) {
+      // If user types directly in the exchange_rate field, lock it as MANUAL
+      if (key === 'exchange_rate') {
+        newData.is_manual_rate = true;
+      }
+
       const rate = Number(newData.exchange_rate) || 1.0;
       const amt = Number(newData.amount || newData.deposit_amount || 0);
       newData.base_amount = amt * rate;
@@ -1042,7 +1047,10 @@ export default function App() {
                               value={selectedResult.data?.currency || 'BHD'}
                               onChange={e => handleDataChange('currency', e.target.value)}
                             >
-                              {activeCurrencies.map(curr => <option key={curr} value={curr}>{curr}</option>)}
+                              {/* Combine Portfolio + the current extracted currency (if missing) */}
+                              {Array.from(new Set([...activeCurrencies, selectedResult.data?.currency])).filter(Boolean).map(curr => (
+                                <option key={curr as string} value={curr as string}>{curr as string}</option>
+                              ))}
                             </select>
                           </div>
                         </div>
@@ -1051,15 +1059,6 @@ export default function App() {
                         <div className="p-5 bg-slate-50 rounded-3xl space-y-4 border border-slate-100">
                           <div className="flex items-center justify-between">
                             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Exchange Rate Snapshot</h4>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[9px] font-bold text-slate-400 italic">Manual Rate</span>
-                              <input 
-                                type="checkbox" 
-                                checked={!!selectedResult.data?.is_manual_rate}
-                                onChange={e => handleDataChange('is_manual_rate', e.target.checked)}
-                                className="w-3 h-3 accent-indigo-600"
-                              />
-                            </div>
                           </div>
                           
                           <div className="grid grid-cols-2 gap-4">
@@ -1344,8 +1343,8 @@ export default function App() {
                       </div>
                     ))}
 
-                    {/* Personal Overrides */}
-                    {personalCurrencies.map(curr => (
+                    {/* Personal Overrides (Filtered to exclude entity duplicates) */}
+                    {personalCurrencies.filter(c => !entityCurrencies.includes(c)).map(curr => (
                       <div key={`pers-${curr}`} className="flex items-center justify-between bg-slate-50 px-4 py-3 rounded-2xl border border-slate-100 group">
                         <div className="flex items-center gap-3">
                           <span className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-[10px] font-black shadow-sm border border-slate-200">{curr}</span>
