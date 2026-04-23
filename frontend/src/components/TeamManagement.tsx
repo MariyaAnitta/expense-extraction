@@ -175,14 +175,17 @@ export default function TeamManagement({ userRole, userTeam, userEntity, onViewD
         await axios.patch(`${API_URL}/update-entity/${editingEntityId}`, {
           name: entityName,
           currency: entityCurrency,
-          symbol: entitySymbol
+          symbol: entitySymbol,
+          // V4: Ensure base currency is in portfolio
+          active_currencies: [entityCurrency, 'USD', 'SAR', 'INR'] 
         });
         setSuccess(`Successfully updated entity: ${entityName}`);
       } else {
         await axios.post(`${API_URL}/create-entity`, {
           name: entityName,
           currency: entityCurrency,
-          symbol: entitySymbol
+          symbol: entitySymbol,
+          active_currencies: [entityCurrency, 'USD', 'SAR', 'INR']
         });
         setSuccess(`Successfully created entity: ${entityName}`);
       }

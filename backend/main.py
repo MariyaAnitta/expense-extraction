@@ -98,17 +98,37 @@ async def debug_supabase():
 
 import asyncio
 
-def get_entity_currency(entity_id: str) -> str:
-    """Fetch the base currency for an entity from Firestore"""
+def get_entity_data(entity_id: str) -> dict:
+    """Fetch entity configuration including base and active currency portfolio"""
+    defaults = {"base": "BHD", "active": ["BHD", "USD", "SAR", "INR"]}
     if not entity_id or entity_id == "default":
-        return "BHD"
+        return defaults
     try:
         doc = db.collection("entities").document(entity_id).get()
         if doc.exists:
-            return doc.to_dict().get("currency", "BHD")
+            d = doc.to_dict()
+            return {
+                "base": d.get("currency", "BHD"),
+                "active": d.get("active_currencies") or [d.get("currency", "BHD"), "USD", "SAR", "INR"]
+            }
     except Exception as e:
-        print(f"Error fetching entity currency: {e}")
-    return "BHD"
+        print(f"Error fetching entity data: {e}")
+    return defaults
+
+def get_entity_currency(entity_id: str) -> str:
+    """Legacy helper for backward compatibility - returns base currency"""
+    return get_entity_data(entity_id)["base"]
+
+@app.post("/update-entity-portfolio")
+async def update_entity_portfolio(entity_id: str, active_currencies: List[str]):
+    try:
+        active_currencies = [c.upper() for c in active_currencies if c]
+        db.collection("entities").document(entity_id).update({
+            "active_currencies": active_currencies
+        })
+        return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 async def get_exchange_rate(from_curr: str, to_curr: str) -> float:
     """Fetch live exchange rate from API"""
@@ -702,22 +722,7 @@ class EntityCreate(BaseModel):
     name: str
     currency: str
     symbol: Optional[str] = ""
-
-class CategoryCreate(BaseModel):
-    name: str
-    type: str # Expense or Deposit
-    is_builtin: bool = False
-    team_id: str = "global"
-
-class BankCreate(BaseModel):
-    name: str
-    is_builtin: bool = False
-    team_id: str = "global"
-
-class BankCreate(BaseModel):
-    name: str
-    is_builtin: bool = False
-    team_id: str = "global"
+    active_currencies: Optional[List[str]] = []
 
 # --- ENTITY MANAGEMENT (V2) ---
 @app.get("/entities")
@@ -742,11 +747,33 @@ async def create_entity(req: EntityCreate):
             "name": req.name.strip(),
             "currency": req.currency.strip().upper(),
             "symbol": req.symbol.strip() if req.symbol else "",
+            "active_currencies": [c.upper() for c in req.active_currencies] if req.active_currencies else [req.currency.strip().upper(), "USD", "SAR", "INR"],
             "created_at": time.time()
         })
         return {"status": "success", "id": doc_ref.id, "message": "Entity created successfully"}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.patch("/update-entity/{entity_id}")
+async def update_entity(entity_id: str, req: EntityCreate):
+    try:
+        db.collection("entities").document(entity_id).update({
+            "name": req.name.strip(),
+            "currency": req.currency.strip().upper(),
+            "symbol": req.symbol.strip() if req.symbol else "",
+            "active_currencies": [c.upper() for c in req.active_currencies] if req.active_currencies else [req.currency.strip().upper(), "USD", "SAR", "INR"]
+        })
+        return {"status": "success"}
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+@app.delete("/delete-entity/{entity_id}")
+async def delete_entity(entity_id: str):
+    try:
+        db.collection("entities").document(entity_id).delete()
+        return {"status": "success"}
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
 
 
 @app.post("/create-user")

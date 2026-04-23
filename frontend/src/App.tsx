@@ -5,7 +5,7 @@ import {
   LayoutDashboard, ShieldCheck, 
   TrendingUp, Zap, FolderOpen,
   Plus, Loader2, Eye, X, Users,
-  BarChart3
+  BarChart3, Globe
 } from 'lucide-react';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
@@ -112,7 +112,18 @@ const getLiveExchangeRate = async (from: string, to: string) => {
   }
 };
 
-const SUPPORTED_CURRENCIES = ['BHD', 'SAR', 'USD', 'INR', 'EUR', 'GBP', 'AED', 'KWD', 'OMR', 'QAR'];
+const SUPPORTED_CURRENCIES = [
+  'AED', 'AFN', 'ALL', 'AMD', 'ANG', 'AOA', 'ARS', 'AUD', 'AWG', 'AZN', 'BAM', 'BBD', 'BDT', 'BGN', 'BHD', 'BIF', 
+  'BMD', 'BND', 'BOB', 'BRL', 'BSD', 'BTN', 'BWP', 'BYN', 'BZD', 'CAD', 'CDF', 'CHF', 'CLP', 'CNY', 'COP', 'CRC', 
+  'CUP', 'CVE', 'CZK', 'DJF', 'DKK', 'DOP', 'DZD', 'EGP', 'ERN', 'ETB', 'EUR', 'FJD', 'FKP', 'FOK', 'GBP', 'GEL', 
+  'GGP', 'GHS', 'GIP', 'GMD', 'GNF', 'GTQ', 'GYD', 'HKD', 'HNL', 'HRK', 'HTG', 'HUF', 'IDR', 'ILS', 'IMP', 'INR', 
+  'IQD', 'IRR', 'ISK', 'JMD', 'JOD', 'JPY', 'KES', 'KGS', 'KHR', 'KID', 'KMF', 'KRW', 'KWD', 'KYD', 'KZT', 'LAK', 
+  'LBP', 'LKR', 'LRD', 'LSL', 'LYD', 'MAD', 'MDL', 'MGA', 'MKD', 'MMK', 'MNT', 'MOP', 'MRU', 'MUR', 'MVR', 'MWK', 
+  'MXN', 'MYR', 'MZN', 'NAD', 'NGN', 'NIO', 'NOK', 'NPR', 'NZD', 'OMR', 'PAB', 'PEN', 'PGK', 'PHP', 'PKR', 'PLN', 
+  'PYG', 'QAR', 'RON', 'RSD', 'RUB', 'RWF', 'SAR', 'SBD', 'SCR', 'SDG', 'SEK', 'SGD', 'SHP', 'SLL', 'SOS', 'SRD', 
+  'SSP', 'STN', 'SYP', 'SZL', 'THB', 'TJS', 'TMT', 'TND', 'TOP', 'TRY', 'TTD', 'TVD', 'TWD', 'TZS', 'UAH', 'UGX', 
+  'USD', 'UYU', 'UZS', 'VES', 'VND', 'VUV', 'WST', 'XAF', 'XCD', 'XDR', 'XOF', 'XPF', 'YER', 'ZAR', 'ZMW', 'ZWL'
+];
 
 export default function App() {
   const [authUser, setAuthUser] = useState<User | null>(null);
@@ -124,6 +135,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState<'board' | 'admin' | 'team' | 'analytics'>('board');
   
   const [userCurrency, setUserCurrency] = useState('BHD');
+  const [activeCurrencies, setActiveCurrencies] = useState<string[]>(['BHD', 'USD', 'SAR', 'INR']);
   
   const handleViewUserDashboard = (uid: string, email: string, team_id?: string) => {
     setUserFilter(uid);
@@ -133,6 +145,8 @@ export default function App() {
     }
     setCurrentView('board');
   };
+  
+  const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
   
   const [queue, setQueue] = useState<ExtractionResult[]>([]);
   const [selectedResult, setSelectedResult] = useState<ExtractionResult | null>(null);
@@ -178,9 +192,11 @@ export default function App() {
                const entityRef = doc(db, 'entities', data.entity_id);
                const entitySnap = await getDoc(entityRef);
                  if (entitySnap.exists()) {
-                   const eData = entitySnap.data();
-                   setUserCurrency(eData.currency || 'BHD');
-                 }
+                    const eData = entitySnap.data();
+                    const base = eData.currency || 'BHD';
+                    setUserCurrency(base);
+                    setActiveCurrencies(eData.active_currencies || [base, 'USD', 'SAR', 'INR']);
+                  }
               }
           } else {
             setUserRole('user'); // Default fallback
@@ -720,6 +736,19 @@ export default function App() {
               <input type="text" placeholder="Search..." className="w-64 bg-slate-100 border-none rounded-full py-2.5 pl-11 pr-4 text-sm font-semibold outline-none" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
             
+            {(userRole === 'admin' || userRole === 'leader') && (
+              <button 
+                onClick={() => setIsCurrencyModalOpen(true)}
+                className="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm group relative"
+                title="Manage Currency Portfolio"
+              >
+                <Globe size={18} className="group-hover:text-indigo-600 transition-colors" />
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-600 text-white text-[8px] font-bold rounded-full flex items-center justify-center border-2 border-white">
+                  {activeCurrencies.length}
+                </div>
+              </button>
+            )}
+
             <button onClick={startProcessing} disabled={isProcessing || queue.length === 0} className="px-6 py-2.5 bg-indigo-600 text-white rounded-full font-bold text-sm hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg shadow-indigo-100">
               {isProcessing ? <Loader2 className="animate-spin" size={18} /> : <Zap size={18} fill="currentColor" />}
               {isProcessing ? 'Analyzing...' : 'Analyze All'}
@@ -1018,7 +1047,7 @@ export default function App() {
                                 value={selectedResult.data?.target_currency || userCurrency}
                                 onChange={e => handleDataChange('target_currency', e.target.value)}
                               >
-                                {SUPPORTED_CURRENCIES.map(curr => <option key={curr} value={curr}>{curr}</option>)}
+                                {activeCurrencies.map(curr => <option key={curr} value={curr}>{curr}</option>)}
                               </select>
                             </div>
                             <div className="space-y-1">
@@ -1236,6 +1265,123 @@ export default function App() {
           )}
         </div>
       </div>
+      {/* Currency Portfolio Management Modal */}
+      {isCurrencyModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 overflow-hidden">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsCurrencyModalOpen(false)} />
+          <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl relative z-10 flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-300 border border-slate-100 overflow-hidden">
+            
+            {/* Header */}
+            <div className="px-10 py-8 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
+                  <Globe size={24} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-slate-800 tracking-tight">Currency Portfolio</h2>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Manage Active Regional Currencies</p>
+                </div>
+              </div>
+              <button onClick={() => setIsCurrencyModalOpen(false)} className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-10 overflow-y-auto custom-scrollbar flex-1">
+              <div className="space-y-8">
+                {/* Base Currency Info */}
+                <div className="bg-emerald-50/50 border border-emerald-100 p-6 rounded-3xl flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-emerald-600 shadow-sm border border-emerald-100 font-black text-xs">
+                      {userCurrency}
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Base Functional Currency</p>
+                      <p className="text-sm font-bold text-emerald-900 truncate max-w-[250px]">Locked for Entity: {userData?.entity_id}</p>
+                    </div>
+                  </div>
+                  <ShieldCheck size={20} className="text-emerald-400" />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 block">Active Portfolio</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {activeCurrencies.map(curr => (
+                      <div key={curr} className="flex items-center justify-between bg-slate-50 px-4 py-3 rounded-2xl border border-slate-100 group">
+                        <div className="flex items-center gap-3">
+                          <span className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-[10px] font-black shadow-sm border border-slate-200">{curr}</span>
+                          <span className="text-sm font-bold text-slate-700">{curr}</span>
+                        </div>
+                        {curr !== userCurrency && (
+                          <button 
+                            onClick={() => setActiveCurrencies(prev => prev.filter(c => c !== curr))}
+                            className="opacity-0 group-hover:opacity-100 p-1.5 text-rose-400 hover:bg-rose-50 rounded-lg transition-all"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <div className="relative group">
+                      <select 
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val && !activeCurrencies.includes(val)) {
+                            setActiveCurrencies(prev => [...prev, val]);
+                          }
+                          e.target.value = "";
+                        }}
+                        className="w-full bg-indigo-50 border-2 border-dashed border-indigo-100 text-indigo-600 rounded-2xl py-3 px-4 text-sm font-bold outline-none cursor-pointer hover:bg-indigo-100/50 transition-all appearance-none"
+                      >
+                        <option value="">+ Add Currency</option>
+                        {SUPPORTED_CURRENCIES.filter(c => !activeCurrencies.includes(c)).map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                      <Plus size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-400 pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-indigo-50/30 p-6 rounded-3xl border border-indigo-100/50">
+                  <p className="text-xs text-indigo-600 font-medium leading-relaxed">
+                    <strong>Tip:</strong> Selecting active currencies limits the dropdowns in your verification panel, making it faster to audit receipts. These changes will apply to everyone in your entity.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-8 px-10 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-4">
+              <button 
+                onClick={() => setIsCurrencyModalOpen(false)}
+                className="px-6 py-3 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  try {
+                    setIsProcessing(true);
+                    // Use actual entity_id if available
+                    const eid = userData?.entity_id || 'default';
+                    await axios.post(`${API_URL}/update-entity-portfolio?entity_id=${eid}`, activeCurrencies);
+                    setIsCurrencyModalOpen(false);
+                  } catch (err: any) {
+                    console.error("Failed to update portfolio", err);
+                    alert("Error updating currency portfolio. Check your connection.");
+                  } finally {
+                    setIsProcessing(false);
+                  }
+                }}
+                className="px-10 py-3 bg-indigo-600 text-white rounded-full font-black text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+              >
+                SAVE PORTFOLIO
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
