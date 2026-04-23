@@ -135,14 +135,30 @@ export default function App() {
   const [currentView, setCurrentView] = useState<'board' | 'admin' | 'team' | 'analytics'>('board');
   
   const [userCurrency, setUserCurrency] = useState('BHD');
-  const [activeCurrencies, setActiveCurrencies] = useState<string[]>(['BHD', 'USD', 'SAR', 'INR']);
+  const [entityCurrencies, setEntityCurrencies] = useState<string[]>(['BHD', 'USD', 'SAR', 'INR']);
+  const [personalCurrencies, setPersonalCurrencies] = useState<string[]>([]);
   
-  const handleViewUserDashboard = (uid: string, email: string, team_id?: string) => {
+  // V4.2 Unified Active Selection
+  const activeCurrencies = Array.from(new Set([userCurrency, ...entityCurrencies, ...personalCurrencies]));
+
+  const handleViewUserDashboard = async (uid: string, email: string, team_id?: string) => {
     setUserFilter(uid);
     setMemberEmail(email);
     if (userRole === 'admin' && team_id) {
        setTeamFilter(team_id);
     }
+    
+    // V4.2 Drill-down context: Fetch target user's personal portfolio
+    try {
+      const userRef = doc(db, 'users', uid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        setPersonalCurrencies(userSnap.data().personal_currencies || []);
+      }
+    } catch (err) {
+      console.error("Failed to load member's portfolio", err);
+    }
+    
     setCurrentView('board');
   };
   
@@ -195,9 +211,12 @@ export default function App() {
                     const eData = entitySnap.data();
                     const base = eData.currency || 'BHD';
                     setUserCurrency(base);
-                    setActiveCurrencies(eData.active_currencies || [base, 'USD', 'SAR', 'INR']);
+                    setEntityCurrencies(eData.active_currencies || [base, 'USD', 'SAR', 'INR']);
                   }
               }
+              
+              // V4.2 Personal Portfolios
+              setPersonalCurrencies(data.personal_currencies || []);
           } else {
             setUserRole('user'); // Default fallback
             setUserData({ role: 'user', team_id: 'General' });
@@ -725,7 +744,12 @@ export default function App() {
               <div className="flex items-center gap-3 bg-indigo-50/50 px-4 py-2 rounded-2xl border border-indigo-100">
                 <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Viewing Member:</span>
                 <span className="text-sm font-bold text-indigo-600">{memberEmail}</span>
-                <button onClick={() => { setUserFilter(null); setMemberEmail(null); }} className="p-1 hover:bg-indigo-100 rounded-full transition-colors text-indigo-400">
+                <button onClick={() => { 
+                  setUserFilter(null); 
+                  setMemberEmail(null);
+                  // Restore own personal portfolio
+                  if (userData) setPersonalCurrencies(userData.personal_currencies || []);
+                }} className="p-1 hover:bg-indigo-100 rounded-full transition-colors text-indigo-400">
                   <X size={14} />
                 </button>
               </div>
@@ -1306,15 +1330,30 @@ export default function App() {
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 block">Active Portfolio</label>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {activeCurrencies.map(curr => (
-                      <div key={curr} className="flex items-center justify-between bg-slate-50 px-4 py-3 rounded-2xl border border-slate-100 group">
+                    {/* Entity Currencies (Locked) */}
+                    {entityCurrencies.map(curr => (
+                      <div key={`ent-${curr}`} className="flex items-center justify-between bg-emerald-50/30 px-4 py-3 rounded-2xl border border-emerald-100/30 group">
+                        <div className="flex items-center gap-3">
+                          <span className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-[10px] font-black shadow-sm border border-emerald-100">{curr}</span>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-bold text-slate-700">{curr}</span>
+                            <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">Inherited</span>
+                          </div>
+                        </div>
+                        <ShieldCheck size={14} className="text-emerald-400 opacity-50" />
+                      </div>
+                    ))}
+
+                    {/* Personal Overrides */}
+                    {personalCurrencies.map(curr => (
+                      <div key={`pers-${curr}`} className="flex items-center justify-between bg-slate-50 px-4 py-3 rounded-2xl border border-slate-100 group">
                         <div className="flex items-center gap-3">
                           <span className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-[10px] font-black shadow-sm border border-slate-200">{curr}</span>
                           <span className="text-sm font-bold text-slate-700">{curr}</span>
                         </div>
                         {curr !== userCurrency && (
                           <button 
-                            onClick={() => setActiveCurrencies(prev => prev.filter(c => c !== curr))}
+                            onClick={() => setPersonalCurrencies(prev => prev.filter(c => c !== curr))}
                             className="opacity-0 group-hover:opacity-100 p-1.5 text-rose-400 hover:bg-rose-50 rounded-lg transition-all"
                           >
                             <Trash2 size={14} />
@@ -1322,12 +1361,19 @@ export default function App() {
                         )}
                       </div>
                     ))}
+
                     <div className="relative group">
                       <select 
                         onChange={(e) => {
                           const val = e.target.value;
                           if (val && !activeCurrencies.includes(val)) {
-                            setActiveCurrencies(prev => [...prev, val]);
+                            // If Admin, they could potentially add to Entity list, 
+                            // but per current request, users add "Personal" provisioning.
+                            if (userRole === 'admin' && !userFilter) {
+                              setEntityCurrencies(prev => [...prev, val]);
+                            } else {
+                              setPersonalCurrencies(prev => [...prev, val]);
+                            }
                           }
                           e.target.value = "";
                         }}
@@ -1345,7 +1391,8 @@ export default function App() {
 
                 <div className="bg-indigo-50/30 p-6 rounded-3xl border border-indigo-100/50">
                   <p className="text-xs text-indigo-600 font-medium leading-relaxed">
-                    <strong>Tip:</strong> Selecting active currencies limits the dropdowns in your verification panel, making it faster to audit receipts. These changes will apply to everyone in your entity.
+                    <strong>Tip:</strong> Selecting active currencies limits the dropdowns in your verification panel, making it faster to audit receipts. 
+                    {userRole === 'admin' && !userFilter ? ' As an Admin, your changes apply to the whole entity.' : ' As a user, these are your personal overrides.'}
                   </p>
                 </div>
               </div>
@@ -1363,9 +1410,20 @@ export default function App() {
                 onClick={async () => {
                   try {
                     setIsProcessing(true);
-                    // Use actual entity_id if available
-                    const eid = userData?.entity_id || 'default';
-                    await axios.post(`${API_URL}/update-entity-portfolio?entity_id=${eid}`, activeCurrencies);
+                    if (userRole === 'admin' && !userFilter) {
+                      // Save to Entity
+                      const eid = userData?.entity_id || 'default';
+                      await axios.post(`${API_URL}/update-entity-portfolio?entity_id=${eid}`, entityCurrencies);
+                    } else {
+                      // Save to User (Self or Target Member)
+                      const uid = userFilter || authUser?.uid;
+                      await axios.post(`${API_URL}/update-user-portfolio?user_id=${uid}`, personalCurrencies);
+                      
+                      // If self, update local user data for state consistency
+                      if (!userFilter && userData) {
+                        setUserData({ ...userData, personal_currencies: personalCurrencies });
+                      }
+                    }
                     setIsCurrencyModalOpen(false);
                   } catch (err: any) {
                     console.error("Failed to update portfolio", err);

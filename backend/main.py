@@ -130,6 +130,17 @@ async def update_entity_portfolio(entity_id: str, active_currencies: List[str]):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+@app.post("/update-user-portfolio")
+async def update_user_portfolio(user_id: str, active_currencies: List[str]):
+    try:
+        active_currencies = [c.upper() for c in active_currencies if c]
+        db.collection("users").document(user_id).update({
+            "personal_currencies": active_currencies
+        })
+        return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 async def get_exchange_rate(from_curr: str, to_curr: str) -> float:
     """Fetch live exchange rate from API"""
     if not from_curr or not to_curr or from_curr.upper() == to_curr.upper():
