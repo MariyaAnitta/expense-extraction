@@ -1011,7 +1011,7 @@ export default function App() {
                                     id={`field-${field.key}`}
                                     type={field.type} 
                                     readOnly={isLocked}
-                                    className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100 disabled:opacity-60" 
+                                    className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 ring-indigo-100 disabled:opacity-60 shadow-sm" 
                                     value={(selectedResult.data?.[field.key as keyof ReceiptData] as string) || ''} 
                                     onChange={e => handleDataChange(field.key as keyof ReceiptData, e.target.value)} 
                                   />
@@ -1029,7 +1029,7 @@ export default function App() {
                               type="text" 
                               readOnly={!!selectedResult.is_verified}
                               inputMode="decimal"
-                              className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none border-none focus:ring-2 ring-indigo-100"
+                              className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 ring-indigo-100 shadow-sm"
                               value={selectedResult.data?.category === 'Deposit' ? (selectedResult.data?.deposit_amount || '') : (selectedResult.data?.amount || '')}
                               onChange={e => handleDataChange(selectedResult.data?.category === 'Deposit' ? 'deposit_amount' : 'amount', e.target.value)}
                             />
@@ -1038,11 +1038,11 @@ export default function App() {
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Currency</label>
                             <select 
                               disabled={!!selectedResult.is_verified}
-                              className="w-full bg-indigo-50/50 text-indigo-600 rounded-xl p-3 text-sm font-black outline-none border-none focus:ring-2 ring-indigo-100"
+                              className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm font-black outline-none focus:ring-2 ring-indigo-100 shadow-sm"
                               value={selectedResult.data?.currency || 'BHD'}
                               onChange={e => handleDataChange('currency', e.target.value)}
                             >
-                              {SUPPORTED_CURRENCIES.map(curr => <option key={curr} value={curr}>{curr}</option>)}
+                              {activeCurrencies.map(curr => <option key={curr} value={curr}>{curr}</option>)}
                             </select>
                           </div>
                         </div>

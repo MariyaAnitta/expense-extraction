@@ -23,6 +23,7 @@ class ReceiptData(BaseModel):
     exchange_rate: Optional[float] = Field(1.0, description="FX rate used (1 original = X target)")
     base_amount: Optional[float] = Field(None, description="Amount in target currency")
     is_manual_rate: bool = Field(False, description="Flag if user overrode the auto-rate")
+    base_currency: Optional[str] = Field(None, description="The entity functional currency (e.g. INR)")
 
 class ExtractionResult(BaseModel):
     file_id: str
