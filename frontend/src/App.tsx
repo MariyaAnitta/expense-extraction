@@ -597,6 +597,68 @@ export default function App() {
     }
   };
 
+  const exportToPDF = async () => {
+    if (userRole === 'user') {
+      const unverified = queue.some(item => !item.is_verified);
+      if (unverified) {
+        alert("Verification Required: Your Team Leader must confirm your receipts before you can export the PDF log.");
+        return;
+      }
+    }
+
+    try {
+      let params: any = {};
+      let fileName = '';
+      const dateStr = new Date().toISOString().split('T')[0];
+      
+      // Use SAME logic for filenames as Excel
+      if (userRole === "admin") {
+        if (userFilter) {
+          params = { user_id: userFilter };
+          fileName = `User_${memberEmail?.split('@')[0] || 'Member'}_Report_${dateStr}.pdf`;
+        } else if (teamFilter === 'Admin Personal') {
+          params = { user_id: authUser?.uid };
+          fileName = `Admin_Personal_Report_${dateStr}.pdf`;
+        } else if (teamFilter !== 'Global') {
+          params = { team_id: teamFilter };
+          fileName = `Team_${teamFilter}_Report_${dateStr}.pdf`;
+        } else {
+          fileName = `Global_Petty_Cash_Report_${dateStr}.pdf`;
+        }
+      } else if (userRole === "leader") {
+        if (userFilter) {
+          params = { user_id: userFilter, team_id: userData?.team_id || "General" };
+          fileName = `User_${memberEmail?.split('@')[0] || 'Member'}_Report_${dateStr}.pdf`;
+        } else if (currentView === 'team') {
+          params = { team_id: userData?.team_id || "General" };
+          fileName = `Team_${userData?.team_id || 'General'}_Report_${dateStr}.pdf`;
+        } else {
+          params = { user_id: authUser?.uid, team_id: userData?.team_id || "General" };
+          fileName = `Leader_Personal_Report_${dateStr}.pdf`;
+        }
+      } else {
+        params = { user_id: authUser?.uid, team_id: userData?.team_id || "General" };
+        fileName = `User_Personal_Report_${dateStr}.pdf`;
+      }
+
+      const response = await axios.get(`${API_URL}/export-pdf`, { 
+        params: { ...params, currency: userCurrency }, 
+        responseType: 'blob' 
+      });
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("PDF Export failed", error);
+      alert("Failed to generate PDF. High volume of records might exceed memory limits.");
+    }
+  };
+
   const handleConfirm = async () => {
     if (!selectedResult || !selectedResult.data) return;
     try {
@@ -810,8 +872,12 @@ export default function App() {
               {isProcessing ? 'Analyzing...' : 'Analyze All'}
             </button>
 
-            <button onClick={exportToExcel} disabled={queue.filter(r => r.status === 'COMPLETED').length === 0} className="px-8 py-3 bg-emerald-500 text-white rounded-full font-black tracking-wide text-sm hover:bg-emerald-600 transition-all flex items-center gap-2">
-              <Download size={18} /> EXPORT TO EXCEL
+            <button onClick={exportToExcel} disabled={queue.filter(r => r.status === 'COMPLETED').length === 0} className="px-5 py-3 bg-emerald-500 text-white rounded-full font-black tracking-wide text-[10px] hover:bg-emerald-600 transition-all flex items-center gap-2 shadow-lg shadow-emerald-100">
+              <Download size={14} /> EXCEL
+            </button>
+
+            <button onClick={exportToPDF} disabled={queue.filter(r => r.status === 'COMPLETED').length === 0} className="px-5 py-3 bg-rose-500 text-white rounded-full font-black tracking-wide text-[10px] hover:bg-rose-600 transition-all flex items-center gap-2 shadow-lg shadow-rose-100">
+              <FileText size={14} /> PDF
             </button>
           </div>
         </header>

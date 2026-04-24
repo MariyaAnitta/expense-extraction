@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from firebase_config import db, bucket
 from processor import ReceiptProcessor
 from excel_exporter import generate_petty_cash_log
+from pdf_exporter import generate_pdf_log
 from models import ExtractionResult, ReceiptData
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -566,17 +567,23 @@ async def add_manual(data: Optional[ReceiptData] = None, user_id: Optional[str] 
         # V4: Fill FX data for manual entries
         orig_currency = data_dict.get("currency", target_currency)
         data_dict["target_currency"] = target_currency
+        data_dict["functional_currency"] = target_currency # Default entity functional to target initially
         
         # If the user didn't provide a rate, fetch it
         if not data_dict.get("exchange_rate") or data_dict.get("exchange_rate") == 1.0:
             data_dict["exchange_rate"] = await get_exchange_rate(orig_currency, target_currency)
         
-        # Calculate base amount
+        # Dual-Track: Functional rate (usually same as target rate for manual entry unless overridden)
+        data_dict["functional_rate"] = data_dict.get("functional_rate") or data_dict["exchange_rate"]
+        
+        # Calculate amounts
         try:
             orig_amt = float(data_dict.get("deposit_amount") or data_dict.get("amount") or 0)
             data_dict["base_amount"] = orig_amt * data_dict["exchange_rate"]
+            data_dict["functional_amount"] = orig_amt * data_dict["functional_rate"]
         except:
             data_dict["base_amount"] = 0.0
+            data_dict["functional_amount"] = 0.0
 
         doc_ref = db.collection("extractions").add({
             "name": data_dict.get("description", "Manual Entry") if data else "Manual Entry",
@@ -719,6 +726,55 @@ async def export_excel(team_id: Optional[str] = None, user_id: Optional[str] = N
         print(error_msg)
         from fastapi.responses import JSONResponse
         return JSONResponse(status_code=500, content={"error": str(e), "traceback": error_msg})
+
+@app.get("/export-pdf")
+async def export_pdf(team_id: Optional[str] = None, user_id: Optional[str] = None, currency: Optional[str] = None):
+    try:
+        # 1. Fetch exactly the same data as Excel
+        docs_ref_query = db.collection("extractions")\
+            .where("status", "in", ["COMPLETED", "AMBER"])\
+            .where("is_verified", "==", True)
+            
+        # Re-use the filtering logic from export_excel
+        if user_id and team_id:
+            docs_ref_query = docs_ref_query.where("team_id", "==", team_id)
+            docs_ref = docs_ref_query.stream()
+            results = []
+            for doc in docs_ref:
+                data = doc.to_dict()
+                if data.get("user_id") == user_id or data.get("user_id") == "automation":
+                    results.append(ExtractionResult(file_id=doc.id, file_name=data.get("name"), status="COMPLETED", data=data.get("data")))
+        elif team_id:
+            docs_ref_query = docs_ref_query.where("team_id", "==", team_id)
+            docs_ref = docs_ref_query.stream()
+            results = [ExtractionResult(file_id=doc.id, file_name=doc.to_dict().get("name"), status="COMPLETED", data=doc.to_dict().get("data")) for doc in docs_ref]
+        elif user_id:
+            docs_ref_query = docs_ref_query.where("user_id", "==", user_id)
+            docs_ref = docs_ref_query.stream()
+            results = [ExtractionResult(file_id=doc.id, file_name=doc.to_dict().get("name"), status="COMPLETED", data=doc.to_dict().get("data")) for doc in docs_ref]
+        else:
+            docs_ref = docs_ref_query.stream()
+            results = [ExtractionResult(file_id=doc.id, file_name=doc.to_dict().get("name"), status="COMPLETED", data=doc.to_dict().get("data")) for doc in docs_ref]
+
+        if not results:
+            return {"error": "No completed extractions to export"}
+
+        # 2. Resolve Currency
+        target_currency = currency.strip().upper() if (currency and currency.strip()) else "INR"
+        
+        # 3. Generate PDF
+        temp_pdf = tempfile.mktemp(suffix=".pdf")
+        generate_pdf_log(results, temp_pdf, currency=target_currency)
+        
+        return FileResponse(
+            temp_pdf,
+            media_type='application/pdf',
+            filename=f"Petty_Cash_Log_{time.strftime('%Y%m%d_%H%M%S')}.pdf"
+        )
+    except Exception as e:
+        import traceback
+        print(f"INTERNAL ERROR EXPORTING PDF: {traceback.format_exc()}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 from pydantic import BaseModel
 

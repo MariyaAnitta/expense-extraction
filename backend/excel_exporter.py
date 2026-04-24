@@ -105,58 +105,75 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
             if not result.data: continue
             d = result.data
             
-            # V4: Use base_amount for ledger calculations (ensuring consistent balance)
-            dep = safe_float(d.base_amount if d.category == "Deposit" else 0)
-            exp = safe_float(d.base_amount if d.category != "Deposit" else 0)
-            running_balance = running_balance + dep - exp
+            # V4.5: Use functional_amount for ledger calculations (Entity Base Currency)
+            # Use functional_amount if exists, else fallback to base_amount for legacy data
+            f_amt = safe_float(d.functional_amount if d.functional_amount is not None else d.base_amount)
             
-            # VALUES ONLY — Let the template handle alignment/styling
-            # DATE: Use native datetime for Excel to recognize it as a date
+            is_dep = (d.category == "Deposit")
+            dep_val = f_amt if is_dep else 0
+            exp_val = f_amt if not is_dep else 0
+            running_balance = running_balance + dep_val - exp_val
+            
+            # Original Amount + Currency for Columns E & F
+            orig_amt = safe_float(d.deposit_amount if is_dep else d.amount)
+            orig_curr = str(d.currency or currency).upper()
+            orig_display = f"{orig_amt:,.3f} {orig_curr}" if orig_amt != 0 else ""
+
+            # DATE (A)
             if d.date:
                 try:
                     dt = parse_date(d.date)
                     if dt != datetime.max:
                         c_date = ws.cell(row=row_idx, column=1, value=dt)
-                        c_date.number_format = 'yyyy-mm-dd' # Match user's prefered display in image
+                        c_date.number_format = 'yyyy-mm-dd'
                     else:
                         ws.cell(row=row_idx, column=1, value=str(d.date))
                 except:
                     ws.cell(row=row_idx, column=1, value=str(d.date))
             
-            desc = d.description or d.category or "Expense"
-            ws.cell(row=row_idx, column=2, value=str(desc))
+            # DESCRIPTION (B)
+            ws.cell(row=row_idx, column=2, value=str(d.description or d.category or "Expense"))
             
-            # Categories (Col 3 & 4)
-            cat_type = d.category or "Expense"
+            # CATEGORIES (C & D)
             sub_type = d.sub_type or ""
-            if cat_type == "Deposit":
+            if is_dep:
                 ws.cell(row=row_idx, column=3, value=str(sub_type))
                 ws.cell(row=row_idx, column=4, value="")
+                # ORIGINAL DEPOSIT (E)
+                ws.cell(row=row_idx, column=5, value=orig_display)
+                ws.cell(row=row_idx, column=6, value="")
             else:
                 ws.cell(row=row_idx, column=3, value="")
                 ws.cell(row=row_idx, column=4, value=str(sub_type))
+                # ORIGINAL EXPENSE (F)
+                ws.cell(row=row_idx, column=5, value="")
+                ws.cell(row=row_idx, column=6, value=orig_display)
 
-            # Main Columns (Functional Currency)
-            if dep != 0: 
-                c = ws.cell(row=row_idx, column=5, value=dep) 
-                c.number_format = f'{currency} #,##0.000'
-            if exp != 0: 
-                c = ws.cell(row=row_idx, column=6, value=exp) 
-                c.number_format = f'{currency} #,##0.000'
-            
-            rb = d.received_by or ""
-            ws.cell(row=row_idx, column=7, value=str(rb)) 
-            
-            c_bal = ws.cell(row=row_idx, column=8, value=running_balance) 
-            c_bal.number_format = f'{currency} #,##0.000'
-            ws.cell(row=row_idx, column=9, value=str(d.remarks or "ok")) 
+            # AUDITED AMOUNT & RATE (G & H)
+            target_curr = str(d.target_currency or currency).upper()
+            if orig_curr != target_curr or d.is_manual_rate:
+                t_amt = safe_float(d.base_amount)
+                ws.cell(row=row_idx, column=7, value=f"{t_amt:,.3f} {target_curr}")
+                ws.cell(row=row_idx, column=8, value=safe_float(d.exchange_rate))
+            else:
+                ws.cell(row=row_idx, column=7, value="")
+                ws.cell(row=row_idx, column=8, value="")
 
-            # V4 Audit Trail: Original Currency Columns
-            orig_amt = safe_float(d.deposit_amount if d.category == "Deposit" else d.amount)
-            ws.cell(row=row_idx, column=10, value=orig_amt)
-            ws.cell(row=row_idx, column=11, value=str(d.currency or currency))
-            ws.cell(row=row_idx, column=12, value=safe_float(d.exchange_rate))
+            # FINAL AMOUNT & RATE (I & J)
+            func_curr = str(d.functional_currency or currency).upper()
+            ws.cell(row=row_idx, column=9, value=f"{f_amt:,.3f} {func_curr}")
+            ws.cell(row=row_idx, column=10, value=safe_float(d.functional_rate or d.exchange_rate))
             
+            # RECEIVED BY (K)
+            ws.cell(row=row_idx, column=11, value=str(d.received_by or ""))
+            
+            # BALANCE (L)
+            c_bal = ws.cell(row=row_idx, column=12, value=running_balance) 
+            c_bal.number_format = '#,##0.000'
+            
+            # REMARKS (M)
+            ws.cell(row=row_idx, column=13, value=str(d.remarks or "ok")) 
+
             row_idx += 1
         except Exception as e:
             print(f"ERROR: Failed to process row {row_idx}: {e}")
