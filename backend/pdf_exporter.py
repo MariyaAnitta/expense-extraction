@@ -19,6 +19,13 @@ class PettyCashPDF(FPDF):
         self.set_text_color(128)
         self.cell(0, 10, f'Page {self.page_no()}/{{nb}}', align='C')
 
+def clean_text(text: str) -> str:
+    """Sanitize string to avoid FPDF character conversion errors (Latin-1 only)."""
+    if not text: return ""
+    # Convert to latin-1 and replace unknown chars with '?'
+    # This prevents the "latin-1' codec can't encode character" crash
+    return str(text).encode('latin-1', 'replace').decode('latin-1')
+
 def generate_pdf_log(results: List[ExtractionResult], output_path: str, currency: str = "BHD"):
     pdf = PettyCashPDF(orientation='L', unit='mm', format='A3') # Landscape, A3 for wide table
     pdf.add_page()
@@ -96,51 +103,58 @@ def generate_pdf_log(results: List[ExtractionResult], output_path: str, currency
     running_balance = 0
     
     for r in results_to_process:
-        d = r.data
-        if not d: continue
-        
-        # Dual-track amounts
-        f_amt = float(d.functional_amount if d.functional_amount is not None else d.base_amount or 0)
-        is_dep = (d.category == "Deposit")
-        running_balance += (f_amt if is_dep else -f_amt)
-        
-        orig_amt = float(d.deposit_amount if is_dep else d.amount or 0)
-        orig_curr = str(d.currency or currency).upper()
-        orig_disp = f"{orig_amt:,.3f} {orig_curr}"
-        
-        target_amt = float(d.base_amount or 0)
-        target_curr = str(d.target_currency or currency).upper()
-        
-        func_curr = str(d.functional_currency or currency).upper()
+        try:
+            d = r.data
+            if not d: continue
+            
+            # Dual-track amounts
+            f_amt = float(d.functional_amount if d.functional_amount is not None else d.base_amount or 0)
+            is_dep = (d.category == "Deposit")
+            running_balance += (f_amt if is_dep else -f_amt)
+            
+            orig_amt = float(d.deposit_amount if is_dep else d.amount or 0)
+            orig_curr = str(d.currency or currency).upper()
+            orig_disp = f"{orig_amt:,.3f} {orig_curr}"
+            
+            target_amt = float(d.base_amount or 0)
+            target_curr = str(d.target_currency or currency).upper()
+            
+            func_curr = str(d.functional_currency or currency).upper()
 
-        # Row Data
-        pdf.cell(w['date'], 10, str(d.date or ''), border=1)
-        pdf.cell(w['desc'], 10, str(d.description or '')[:35], border=1)
-        pdf.cell(w['cat'], 10, str(d.sub_type or d.category or '')[:25], border=1)
-        
-        # Original (Highlight Deposit vs Expense)
-        if is_dep: pdf.set_text_color(0, 150, 0) # Green
-        else: pdf.set_text_color(200, 0, 0) # Red
-        pdf.cell(w['orig'], 10, orig_disp, border=1, align='R')
-        pdf.set_text_color(0)
-        
-        # Audited
-        audit_disp = f"{target_amt:,.3f} {target_curr}" if (orig_curr != target_curr) else ""
-        pdf.cell(w['audit'], 10, audit_disp, border=1, align='R')
-        pdf.cell(w['rate'], 10, f"{float(d.exchange_rate or 1):.4f}" if audit_disp else "", border=1, align='C')
-        
-        # Final
-        pdf.set_font('helvetica', 'B', 8)
-        pdf.cell(w['final'], 10, f"{f_amt:,.3f} {func_curr}", border=1, align='R')
-        pdf.set_font('helvetica', '', 8)
-        pdf.cell(w['rate'], 10, f"{float(d.functional_rate or 1):.4f}", border=1, align='C')
-        
-        pdf.cell(w['recv'], 10, str(d.received_by or '')[:20], border=1)
-        
-        # Balance
-        pdf.set_font('helvetica', 'B', 8)
-        pdf.cell(w['bal'], 10, f"{running_balance:,.3f}", border=1, align='R')
-        pdf.set_font('helvetica', '', 8)
-        pdf.ln()
+            # Row Data (All sanitized via clean_text)
+            pdf.cell(w['date'], 10, clean_text(str(d.date or '')), border=1)
+            pdf.cell(w['desc'], 10, clean_text(str(d.description or '')[:35]), border=1)
+            pdf.cell(w['cat'], 10, clean_text(str(d.sub_type or d.category or '')[:25]), border=1)
+            
+            # Original (Highlight Deposit vs Expense)
+            if is_dep: pdf.set_text_color(0, 150, 0) # Green
+            else: pdf.set_text_color(200, 0, 0) # Red
+            pdf.cell(w['orig'], 10, clean_text(orig_disp), border=1, align='R')
+            pdf.set_text_color(0)
+            
+            # Audited
+            audit_disp = f"{target_amt:,.3f} {target_curr}" if (orig_curr != target_curr) else ""
+            pdf.cell(w['audit'], 10, clean_text(audit_disp), border=1, align='R')
+            pdf.cell(w['rate'], 10, clean_text(f"{float(d.exchange_rate or 1):.4f}" if audit_disp else ""), border=1, align='C')
+            
+            # Final
+            pdf.set_font('helvetica', 'B', 8)
+            pdf.cell(w['final'], 10, clean_text(f"{f_amt:,.3f} {func_curr}"), border=1, align='R')
+            pdf.set_font('helvetica', '', 8)
+            pdf.cell(w['rate'], 10, clean_text(f"{float(d.functional_rate or 1):.4f}"), border=1, align='C')
+            
+            pdf.cell(w['recv'], 10, clean_text(str(d.received_by or '')[:20]), border=1)
+            
+            # Balance
+            pdf.set_font('helvetica', 'B', 8)
+            pdf.cell(w['bal'], 10, clean_text(f"{running_balance:,.3f}"), border=1, align='R')
+            pdf.set_font('helvetica', '', 8)
+            pdf.ln()
+        except Exception as row_err:
+            print(f"PDF Logic Error on row: {row_err}")
+            # Ensure we jump to next line even if cell fails
+            try: pdf.ln()
+            except: pass
+            continue
 
     pdf.output(output_path)
