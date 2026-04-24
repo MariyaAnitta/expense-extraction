@@ -28,6 +28,9 @@ class ReceiptData(BaseModel):
     functional_rate: Optional[float] = Field(1.0, description="FX rate used (1 original = X functional)")
     functional_amount: Optional[float] = Field(None, description="Amount in entity functional currency")
 
+    # Legacy Compatibility
+    base_currency: Optional[str] = Field(None, description="DEPRECATED: Use target_currency or functional_currency instead")
+
 class ExtractionResult(BaseModel):
     file_id: str
     file_name: str
