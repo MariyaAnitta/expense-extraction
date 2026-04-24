@@ -816,7 +816,7 @@ export default function App() {
           ) : (
             <>
               <div className="grid grid-cols-3 gap-6">
-                <StatCard icon={TrendingUp} label="Total Expenses" value={totalAmount} subtext={userCurrency} trend="+12%" colorClass="text-rose-500" />
+                <StatCard icon={TrendingUp} label="Total Expenses" value={`DEBUG-B:${totalAmount}`} subtext={userCurrency} trend="+12%" colorClass="text-rose-500" />
                 <StatCard icon={Plus} label="Total Deposits" value={totalDeposits} subtext={userCurrency} colorClass="text-emerald-500" />
                 <StatCard icon={ShieldCheck} label="Avg. Confidence" value={`${avgConfidence}%`} subtext="AI Score" colorClass="text-indigo-500" />
               </div>
