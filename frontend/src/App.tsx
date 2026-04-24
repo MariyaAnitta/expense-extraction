@@ -138,8 +138,8 @@ export default function App() {
   const [entityCurrencies, setEntityCurrencies] = useState<string[]>(['BHD', 'USD', 'SAR', 'INR']);
   const [personalCurrencies, setPersonalCurrencies] = useState<string[]>([]);
   
-  // V4.2 Unified Active Selection
-  const activeCurrencies = Array.from(new Set([userCurrency, ...entityCurrencies, ...personalCurrencies]));
+  // V4.2 Unified Active Selection (Sanitized & Unique)
+  const activeCurrencies = Array.from(new Set([userCurrency, ...entityCurrencies, ...personalCurrencies].map(c => c.trim().toUpperCase())));
 
   const handleViewUserDashboard = async (uid: string, email: string, team_id?: string) => {
     setUserFilter(uid);
@@ -663,7 +663,26 @@ export default function App() {
       // If currency changed, trigger an async rate update if not manual
       if ((key === 'currency' || key === 'target_currency') && !newData.is_manual_rate) {
         getLiveExchangeRate(newData.currency || 'BHD', newData.target_currency || userCurrency || 'BHD').then(newRate => {
-          handleDataChange('exchange_rate', newRate, 'auto');
+          // IMPORTANT: Use functional update to avoid overwriting recent state changes (like the currency change itself)
+          setQueue(prev => prev.map(item => {
+            if (item.file_id === selectedResult.file_id) {
+              const d = item.data;
+              if (!d) return item;
+              const rate = Number(newRate) || 1.0;
+              const amt = Number(d.amount || d.deposit_amount || 0);
+              const updatedData = { 
+                ...d, 
+                exchange_rate: newRate, 
+                base_amount: amt * rate 
+              };
+              
+              // Also update selectedResult if it's currently showing this item
+              setSelectedResult(prevSel => prevSel?.file_id === item.file_id ? { ...prevSel, data: updatedData } : prevSel);
+              
+              return { ...item, data: updatedData };
+            }
+            return item;
+          }));
         });
       }
     }
@@ -1340,7 +1359,7 @@ export default function App() {
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {/* Entity Currencies (Locked & Sanitized Deduplication) */}
                     {Array.from(new Set(entityCurrencies.map(c => c.trim().toUpperCase()))).map(curr => (
-                      <div key={`ent-${curr}`} className="flex items-center justify-between bg-emerald-50/30 px-4 py-3 rounded-2xl border border-emerald-100/30 group">
+                      <div key={`ent-${curr}-${Math.random()}`} className="flex items-center justify-between bg-emerald-50/30 px-4 py-3 rounded-2xl border border-emerald-100/30 group">
                         <div className="flex items-center gap-3">
                           <span className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-[10px] font-black shadow-sm border border-emerald-100">{curr}</span>
                           <div className="flex flex-col">
@@ -1352,8 +1371,8 @@ export default function App() {
                       </div>
                     ))}
 
-                    {/* Personal Overrides (Filtered to exclude entity duplicates) */}
-                    {personalCurrencies.filter(c => !entityCurrencies.includes(c)).map(curr => (
+                    {/* Personal Overrides (Normalized Filter to prevent duplicates) */}
+                    {personalCurrencies.filter(c => !entityCurrencies.map(ec => ec.trim().toUpperCase()).includes(c.trim().toUpperCase())).map(curr => (
                       <div key={`pers-${curr}`} className="flex items-center justify-between bg-slate-50 px-4 py-3 rounded-2xl border border-slate-100 group">
                         <div className="flex items-center gap-3">
                           <span className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-[10px] font-black shadow-sm border border-slate-200">{curr}</span>
