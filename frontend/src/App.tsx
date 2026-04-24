@@ -45,6 +45,10 @@ interface ReceiptData {
   exchange_rate?: number;
   base_amount?: number;
   is_manual_rate?: boolean;
+  // V4.5 Dual-Track reporting
+  functional_amount?: number;
+  functional_rate?: number;
+  functional_currency?: string;
 }
 
 interface ExtractionResult {
@@ -292,12 +296,12 @@ export default function App() {
     : '0';
   const totalAmount = queue
     .filter(r => r.status === 'COMPLETED' && r.data && r.data.category !== 'Deposit')
-    .reduce((acc, curr) => acc + (Number(curr.data!.base_amount) || 0), 0)
+    .reduce((acc, curr) => acc + (Number(curr.data!.functional_amount || curr.data!.base_amount) || 0), 0)
     .toLocaleString(undefined, { minimumFractionDigits: 3 });
   
   const totalDeposits = queue
     .filter(r => r.status === 'COMPLETED' && r.data && r.data.category === 'Deposit')
-    .reduce((acc, curr) => acc + (Number(curr.data!.base_amount) || 0), 0)
+    .reduce((acc, curr) => acc + (Number(curr.data!.functional_amount || curr.data!.base_amount) || 0), 0)
     .toLocaleString(undefined, { minimumFractionDigits: 3 });
 
   useEffect(() => {
@@ -614,7 +618,7 @@ export default function App() {
     }
   };
 
-  const handleDataChange = (key: keyof ReceiptData, value: any, source: 'manual' | 'auto' = 'manual') => {
+  const handleDataChange = async (key: keyof ReceiptData, value: any) => {
     if (!selectedResult || !selectedResult.data) return;
     
     let newData = { ...selectedResult.data, [key]: value };
@@ -649,47 +653,51 @@ export default function App() {
       updatedResult.file_name = `Manual Entry - ${displayDate}`;
     }
 
-    // V4 FX Calculation Logic
-    if (['currency', 'target_currency', 'amount', 'deposit_amount', 'exchange_rate'].includes(key)) {
-      // If user types directly in the exchange_rate field, lock it as MANUAL
-      if (key === 'exchange_rate' && source === 'manual') {
-        newData.is_manual_rate = true;
-      }
-
+    // V4.5 Dual-Track FX Calculation Logic
+    if (['currency', 'target_currency', 'amount', 'deposit_amount', 'exchange_rate', 'is_manual_rate'].includes(key)) {
       const rate = Number(newData.exchange_rate) || 1.0;
       const amt = Number(newData.amount || newData.deposit_amount || 0);
       newData.base_amount = amt * rate;
+      newData.functional_currency = userCurrency; // Fixed entity standard
 
-      // If currency changed, trigger an async rate update if not manual
+      // Re-calculate functional amount if rate exists or is 1:1
+      if (!newData.functional_rate || (newData.currency === userCurrency)) {
+         newData.functional_rate = newData.currency === userCurrency ? 1.0 : (newData.functional_rate || rate);
+      }
+      newData.functional_amount = amt * (newData.functional_rate || 1.0);
+
+      // If currency changed, trigger async dual rate update
       if ((key === 'currency' || key === 'target_currency') && !newData.is_manual_rate) {
+        // Track 1: Target RATE
         getLiveExchangeRate(newData.currency || 'BHD', newData.target_currency || userCurrency || 'BHD').then(newRate => {
-          // IMPORTANT: Use functional update to avoid overwriting recent state changes (like the currency change itself)
-          setQueue(prev => prev.map(item => {
-            if (item.file_id === selectedResult.file_id) {
-              const d = item.data;
-              if (!d) return item;
-              const rate = Number(newRate) || 1.0;
-              const amt = Number(d.amount || d.deposit_amount || 0);
-              const updatedData = { 
-                ...d, 
-                exchange_rate: newRate, 
-                base_amount: amt * rate 
-              };
-              
-              // Also update selectedResult if it's currently showing this item
-              setSelectedResult(prevSel => prevSel?.file_id === item.file_id ? { ...prevSel, data: updatedData } : prevSel);
-              
-              return { ...item, data: updatedData };
-            }
-            return item;
-          }));
+           // Track 2: Functional RATE (Entity standard)
+           getLiveExchangeRate(newData.currency || 'BHD', userCurrency).then(funcRate => {
+              setQueue(prev => prev.map(item => {
+                if (item.file_id === selectedResult.file_id) {
+                  const d = item.data;
+                  if (!d || d.is_manual_rate) return item;
+                  const amtValue = Number(d.amount || d.deposit_amount || 0);
+                  const updatedData = { 
+                    ...d, 
+                    exchange_rate: newRate, 
+                    base_amount: amtValue * (Number(newRate) || 1.0),
+                    functional_currency: userCurrency,
+                    functional_rate: funcRate,
+                    functional_amount: amtValue * (Number(funcRate) || 1.0)
+                  };
+                  setSelectedResult(prevSel => prevSel?.file_id === item.file_id ? { ...prevSel, data: updatedData } : prevSel);
+                  return { ...item, data: updatedData };
+                }
+                return item;
+              }));
+           });
         });
       }
     }
 
     setSelectedResult(updatedResult);
-
-    // Sync back to queue for immediate UI updates in the list
+    
+    // V2: SYNC BACK to queue (Functional Update to prevent race conditions)
     setQueue(prev => prev.map(item => 
       item.file_id === selectedResult.file_id ? updatedResult : item
     ));
@@ -816,7 +824,7 @@ export default function App() {
           ) : (
             <>
               <div className="grid grid-cols-3 gap-6">
-                <StatCard icon={TrendingUp} label="Total Expenses" value={`DEBUG-B:${totalAmount}`} subtext={userCurrency} trend="+12%" colorClass="text-rose-500" />
+                <StatCard icon={TrendingUp} label="Total Expenses" value={totalAmount} subtext={userCurrency} trend="+12%" colorClass="text-rose-500" />
                 <StatCard icon={Plus} label="Total Deposits" value={totalDeposits} subtext={userCurrency} colorClass="text-emerald-500" />
                 <StatCard icon={ShieldCheck} label="Avg. Confidence" value={`${avgConfidence}%`} subtext="AI Score" colorClass="text-indigo-500" />
               </div>
@@ -1101,18 +1109,30 @@ export default function App() {
                                 value={selectedResult.data?.exchange_rate || '1.0'}
                                 onChange={e => {
                                   handleDataChange('exchange_rate', e.target.value);
-                                  handleDataChange('is_manual_rate', true); // Auto-flag as manual if typed
+                                  handleDataChange('is_manual_rate', true); 
                                 }}
                               />
                             </div>
                           </div>
 
-                          <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                            <span className="text-xs font-bold text-slate-500">Converted Amount:</span>
-                            <span className="text-lg font-black text-indigo-600">
-                              {Number(selectedResult.data?.base_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
-                              <span className="ml-1 text-xs">{selectedResult.data?.target_currency || userCurrency}</span>
-                            </span>
+                          <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
+                             <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase">Target Amount:</span>
+                                <span className="text-base font-bold text-slate-600">
+                                  {Number(selectedResult.data?.base_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                                  <span className="ml-1 text-[10px] text-slate-400">{selectedResult.data?.target_currency || userCurrency}</span>
+                                </span>
+                             </div>
+                             
+                             {(selectedResult.data?.target_currency || userCurrency) !== userCurrency && (
+                               <div className="flex items-center justify-between bg-emerald-50/50 p-2 rounded-lg border border-emerald-100/50">
+                                  <span className="text-[10px] font-black text-emerald-600 uppercase">Functional ({userCurrency}):</span>
+                                  <span className="text-base font-black text-emerald-700">
+                                    {Number(selectedResult.data?.functional_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                                    <span className="ml-1 text-[10px] opacity-60">{userCurrency}</span>
+                                  </span>
+                               </div>
+                             )}
                           </div>
                         </div>
 

@@ -10,6 +10,8 @@ interface ReceiptData {
   deposit_amount: number | string | null;
   category?: string;
   base_amount?: number;
+  functional_amount?: number;
+  functional_rate?: number;
 }
 
 interface ExtractionResult {
@@ -33,29 +35,25 @@ export default function Analytics({ data, userRole, currency = 'BHD' }: Analytic
   const stats = useMemo(() => {
     let totalDeposits = 0;
     let totalExpenses = 0;
-    
+    let matchingCount = 0;
     verifiedData.forEach(item => {
       const d = item.data;
       if (!d) return;
 
-      // Ensure we are only summing amounts that match the dashboard's functional currency
-      // If a user changed the target to SAR on a specific receipt, it shouldn't pollute the INR total
-      const receiptTarget = (d as any).target_currency || currency;
-      if (receiptTarget !== currency) {
-        console.warn(`Skipping receipt ${item.file_id} in analytics: target ${receiptTarget} does not match dashboard ${currency}`);
-        return;
-      }
-
-      const baseAmt = parseFloat(String(d.base_amount || 0));
+      // Use functional_amount for reporting (normalized to the entity functional currency)
+      // Fallback to base_amount for legacy receipts that haven't been re-synced yet.
+      const functionalAmt = parseFloat(String(d.functional_amount || d.base_amount || 0));
+      
       if (d.category === 'Deposit') {
-        totalDeposits += baseAmt;
+        totalDeposits += functionalAmt;
       } else {
-        totalExpenses += baseAmt;
+        totalExpenses += functionalAmt;
+        matchingCount++;
       }
     });
 
     const balance = totalDeposits - totalExpenses;
-    const avgTransaction = verifiedData.length > 0 ? (totalExpenses / verifiedData.length) : 0;
+    const avgTransaction = matchingCount > 0 ? (totalExpenses / matchingCount) : 0;
 
     return { totalDeposits, totalExpenses, balance, avgTransaction };
   }, [verifiedData]);
@@ -78,12 +76,13 @@ export default function Analytics({ data, userRole, currency = 'BHD' }: Analytic
       if (isNaN(dateObj.getTime())) return;
       
       const monthLabel = months[dateObj.getMonth()];
-      const baseAmt = parseFloat(String(d.base_amount || 0));
+      // Use functional_amount for reporting (normalized to company standard)
+      const functionalAmt = parseFloat(String(d.functional_amount || d.base_amount || 0));
 
       if (d.category === 'Deposit') {
-        monthlyMap[monthLabel].deposits += baseAmt;
+        monthlyMap[monthLabel].deposits += functionalAmt;
       } else {
-        monthlyMap[monthLabel].expenses += baseAmt;
+        monthlyMap[monthLabel].expenses += functionalAmt;
       }
     });
 
