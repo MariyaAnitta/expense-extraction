@@ -291,13 +291,13 @@ export default function App() {
     ? (queue.filter(r => r.data).reduce((acc, curr) => acc + (curr.data?.confidence || 0), 0) / totalCompleted).toFixed(0) 
     : '0';
   const totalAmount = queue
-    .filter(r => r.status === 'COMPLETED' && r.data && r.data.amount)
-    .reduce((acc, curr) => acc + (Number(curr.data!.amount) || 0), 0)
+    .filter(r => r.status === 'COMPLETED' && r.data && r.data.category !== 'Deposit')
+    .reduce((acc, curr) => acc + (Number(curr.data!.base_amount) || 0), 0)
     .toLocaleString(undefined, { minimumFractionDigits: 3 });
   
   const totalDeposits = queue
-    .filter(r => r.status === 'COMPLETED' && r.data && r.data.deposit_amount)
-    .reduce((acc, curr) => acc + (Number(curr.data!.deposit_amount) || 0), 0)
+    .filter(r => r.status === 'COMPLETED' && r.data && r.data.category === 'Deposit')
+    .reduce((acc, curr) => acc + (Number(curr.data!.base_amount) || 0), 0)
     .toLocaleString(undefined, { minimumFractionDigits: 3 });
 
   useEffect(() => {
@@ -614,7 +614,7 @@ export default function App() {
     }
   };
 
-  const handleDataChange = (key: keyof ReceiptData, value: any) => {
+  const handleDataChange = (key: keyof ReceiptData, value: any, source: 'manual' | 'auto' = 'manual') => {
     if (!selectedResult || !selectedResult.data) return;
     
     let newData = { ...selectedResult.data, [key]: value };
@@ -652,7 +652,7 @@ export default function App() {
     // V4 FX Calculation Logic
     if (['currency', 'target_currency', 'amount', 'deposit_amount', 'exchange_rate'].includes(key)) {
       // If user types directly in the exchange_rate field, lock it as MANUAL
-      if (key === 'exchange_rate') {
+      if (key === 'exchange_rate' && source === 'manual') {
         newData.is_manual_rate = true;
       }
 
@@ -663,7 +663,7 @@ export default function App() {
       // If currency changed, trigger an async rate update if not manual
       if ((key === 'currency' || key === 'target_currency') && !newData.is_manual_rate) {
         getLiveExchangeRate(newData.currency || 'BHD', newData.target_currency || userCurrency || 'BHD').then(newRate => {
-          handleDataChange('exchange_rate', newRate);
+          handleDataChange('exchange_rate', newRate, 'auto');
         });
       }
     }

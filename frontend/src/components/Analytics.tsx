@@ -37,8 +37,16 @@ export default function Analytics({ data, userRole, currency = 'BHD' }: Analytic
     verifiedData.forEach(item => {
       const d = item.data;
       if (!d) return;
+
+      // Ensure we are only summing amounts that match the dashboard's functional currency
+      // If a user changed the target to SAR on a specific receipt, it shouldn't pollute the INR total
+      const receiptTarget = (d as any).target_currency || currency;
+      if (receiptTarget !== currency) {
+        console.warn(`Skipping receipt ${item.file_id} in analytics: target ${receiptTarget} does not match dashboard ${currency}`);
+        return;
+      }
+
       const baseAmt = parseFloat(String(d.base_amount || 0));
-      
       if (d.category === 'Deposit') {
         totalDeposits += baseAmt;
       } else {
