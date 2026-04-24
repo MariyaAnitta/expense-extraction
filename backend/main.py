@@ -250,7 +250,7 @@ async def run_batch_processor():
                 orig_currency = result.data.currency or target_currency
                 rate = await get_exchange_rate(orig_currency, target_currency)
                 
-                # Calculate base amount
+                # Calculate base amount (Target Audit)
                 orig_amount = 0.0
                 try:
                     if result.data.category == "Deposit":
@@ -260,13 +260,17 @@ async def run_batch_processor():
                 except:
                     pass
                 
-                base_amount = orig_amount * rate
-                
-                # Update the model data
-                result.data.target_currency = target_currency
+                # Dual-Track FX: 
+                # 1. Target (User Audit Choice)
                 result.data.exchange_rate = rate
-                result.data.base_amount = base_amount
-                result.data.base_currency = target_currency # For consistency
+                result.data.base_amount = orig_amount * rate
+                result.data.target_currency = target_currency
+                
+                # 2. Functional (Entity Standard - e.g. INR)
+                # For initial AI extraction, functional usually matches target unless target is manually overridden later
+                result.data.functional_currency = target_currency 
+                result.data.functional_rate = rate
+                result.data.functional_amount = orig_amount * rate
             
             # 4. Update Firestore with all data + image_url + FX data
             update_data = {
@@ -513,7 +517,7 @@ async def update_extraction(doc_id: str, data: ReceiptData, role: str = "user"):
         # is_verified is the GLOBAL gate for Excel exports.
         # Only leaders and admins can set it to True.
         
-        if role == "leader":
+        if role in ["leader", "admin"]:
             update_dict["is_verified"] = True
             update_dict["leader_verified"] = True
             update_dict["user_verified"] = True

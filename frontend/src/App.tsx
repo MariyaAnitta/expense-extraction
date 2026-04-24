@@ -532,12 +532,10 @@ export default function App() {
   };
 
   const exportToExcel = async () => {
-    if (userRole === 'user') {
-      const unverified = queue.some(item => !item.is_verified);
-      if (unverified) {
-        alert("Verification Required: Your Team Leader must confirm your receipts before you can export the Excel log.");
-        return;
-      }
+    const unverifiedItems = queue.filter(item => !item.is_verified);
+    if (unverifiedItems.length > 0) {
+      alert(`Verification Required: There are ${unverifiedItems.length} item(s) in your view that are not fully verified. Please ensure all receipts are verified before exporting the official log.`);
+      return;
     }
 
     try {
@@ -598,12 +596,10 @@ export default function App() {
   };
 
   const exportToPDF = async () => {
-    if (userRole === 'user') {
-      const unverified = queue.some(item => !item.is_verified);
-      if (unverified) {
-        alert("Verification Required: Your Team Leader must confirm your receipts before you can export the PDF log.");
-        return;
-      }
+    const unverifiedItems = queue.filter(item => !item.is_verified);
+    if (unverifiedItems.length > 0) {
+      alert(`Verification Required: There are ${unverifiedItems.length} item(s) in your view that are not fully verified. Please ensure all receipts are verified before exporting the official log.`);
+      return;
     }
 
     try {
@@ -1190,15 +1186,19 @@ export default function App() {
                                 </span>
                              </div>
                              
-                             {(selectedResult.data?.target_currency || userCurrency) !== userCurrency && (
-                               <div className="flex items-center justify-between bg-emerald-50/50 p-2 rounded-lg border border-emerald-100/50">
-                                  <span className="text-[10px] font-black text-emerald-600 uppercase">Functional ({userCurrency}):</span>
-                                  <span className="text-base font-black text-emerald-700">
-                                    {Number(selectedResult.data?.functional_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
-                                    <span className="ml-1 text-[10px] opacity-60">{userCurrency}</span>
-                                  </span>
-                               </div>
-                             )}
+                              <div className="flex items-center justify-between bg-emerald-50/50 p-2 rounded-lg border border-emerald-100/50">
+                                <span className="text-[10px] font-black text-emerald-600 uppercase">Functional ({userCurrency}):</span>
+                                <span className="text-base font-black text-emerald-700">
+                                  {(() => {
+                                    const fAmt = selectedResult.data?.functional_amount;
+                                    const bAmt = selectedResult.data?.base_amount;
+                                    // Robust Fallback: if functional matches target or is missing, use base_amount
+                                    const displayAmt = (fAmt !== undefined && fAmt !== null) ? fAmt : bAmt;
+                                    return Number(displayAmt || 0).toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+                                  })()}
+                                  <span className="ml-1 text-[10px] opacity-60">{userCurrency}</span>
+                                </span>
+                              </div>
                           </div>
                         </div>
 
