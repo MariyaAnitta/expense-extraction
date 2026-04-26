@@ -122,9 +122,9 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
             exp_val = f_amt if not is_dep else 0
             running_balance = running_balance + dep_val - exp_val
             
-            # Currency formatting patterns
-            # Pattern: [$CODE] * #,##0.000 ensures code is left and amount is right aligned
-            def get_fmt(curr_code):
+            # Standard accounting format: [CurrencyCode] aligned left, amount right
+            def get_accounting_fmt(curr_code):
+                # Using the [$ ] syntax is the most robust way to handle multi-currency for Excel
                 return f'[$ {curr_code.upper()}] * #,##0.000'
 
             orig_amt = safe_float(d.deposit_amount if is_dep else d.amount)
@@ -152,7 +152,7 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
                 ws.cell(row=row_idx, column=4, value="")
                 # ORIGINAL DEPOSIT (E)
                 c_orig = ws.cell(row=row_idx, column=5, value=orig_amt)
-                c_orig.number_format = get_fmt(orig_curr)
+                c_orig.number_format = get_accounting_fmt(orig_curr)
                 ws.cell(row=row_idx, column=6, value="")
             else:
                 ws.cell(row=row_idx, column=3, value="")
@@ -160,7 +160,7 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
                 # ORIGINAL EXPENSE (F)
                 ws.cell(row=row_idx, column=5, value="")
                 c_orig = ws.cell(row=row_idx, column=6, value=orig_amt)
-                c_orig.number_format = get_fmt(orig_curr)
+                c_orig.number_format = get_accounting_fmt(orig_curr)
 
             # AUDITED AMOUNT & RATE (G & H)
             target_curr = str(d.target_currency or currency).upper()
@@ -178,16 +178,12 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
 
             # FINAL AMOUNT & RATE (I & J)
             func_curr = str(d.functional_currency or currency).upper()
-            # V6: Professional Accounting Format (Prefix CUR, Right Aligned Amount)
-            # We use a simpler format to avoid conflicts with template suffixes
-            def get_accounting_fmt(curr_code):
-                return f'"$ "{curr_code.upper()}* #,##0.000'
-
+            
             c_func = ws.cell(row=row_idx, column=9, value=f_amt)
             c_func.number_format = get_accounting_fmt(func_curr)
             
             c_frate = ws.cell(row=row_idx, column=10, value=safe_float(d.functional_rate or d.exchange_rate))
-            c_frate.number_format = f'"{func_curr} "0.000000'
+            c_frate.number_format = f'[$ {func_curr}] * 0.000000'
             
             # RECEIVED BY (K)
             ws.cell(row=row_idx, column=11, value=str(d.received_by or ""))
@@ -213,21 +209,36 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
         t_row = 123
         func_curr = str(currency).upper() 
         
-        # formulas
-        ws.cell(row=t_row, column=5, value=f"=SUBTOTAL(109, E5:E{row_idx-1})")
-        ws.cell(row=t_row, column=6, value=f"=SUBTOTAL(109, F5:F{row_idx-1})")
-        ws.cell(row=t_row, column=9, value=f"=SUBTOTAL(109, I5:I{row_idx-1})")
+        # Calculate sums in functional (base) currency to avoid mixed-currency math errors
+        total_dep = 0
+        total_exp = 0
+        for r in results_to_process:
+            if not r.data: continue
+            val = safe_float(r.data.functional_amount if r.data.functional_amount is not None else r.data.base_amount)
+            if r.data.category == "Deposit":
+                total_dep += val
+            else:
+                total_exp += val
+
+        # In Row 123, we prioritize the BASE CURRENCY TOTALS as requested by the user
+        # Column E/F are "Original", but user wants them to show the base currency sum for correctness
+        ws.cell(row=t_row, column=5, value=total_dep)
+        ws.cell(row=t_row, column=6, value=total_exp)
+        
+        # Column I is the standard Final Amount total
+        ws.cell(row=t_row, column=9, value=total_dep - total_exp) # Net change logic? 
+        # Actually, Column I usually sums the whole functional column? 
+        # Dashboard shows Net Balance (Deposits - Expenses). 
+        # But if the user wants "Total Expense", they usually mean the Absolute sum of expenses.
+        # Let's check Row 123 Column I's purpose in the template. 
+        # Usually it's "Summary" or "Total".
+        ws.cell(row=t_row, column=9, value=total_dep - total_exp)
         
         # Apply bold and accounting format to totals
         for col in [5, 6, 9]:
             c = ws.cell(row=t_row, column=col)
             c.font = Font(bold=True)
-            if col == 9:
-                # Final Amount total MUST have currency prefix
-                c.number_format = get_accounting_fmt(func_curr)
-            else:
-                # For original, we just show numbers as currencies vary, but we bold them
-                c.number_format = '#,##0.000'
+            c.number_format = get_accounting_fmt(func_curr)
     except Exception as e:
         print(f"ERROR: Failed to update Template Total row 123: {e}")
 

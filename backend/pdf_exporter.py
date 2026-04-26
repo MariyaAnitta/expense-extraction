@@ -149,7 +149,7 @@ def generate_pdf_log(results: List[ExtractionResult], output_path: str, currency
             
             # Balance
             pdf.set_font('helvetica', 'B', 8)
-            pdf.cell(w['bal'], 10, clean_text(f"{running_balance:,.3f}"), border=1, align='R')
+            pdf.cell(w['bal'], 10, clean_text(f"{running_balance:,.3f} {func_curr}"), border=1, align='R')
             pdf.set_font('helvetica', '', 8)
             pdf.ln()
         except Exception as row_err:
@@ -158,5 +158,47 @@ def generate_pdf_log(results: List[ExtractionResult], output_path: str, currency
             try: pdf.ln()
             except: pass
             continue
+
+    # --- Financial Summary Table ---
+    pdf.ln(10)
+    pdf.set_font('helvetica', 'B', 12)
+    pdf.set_text_color(80, 40, 120) # Purple
+    pdf.cell(0, 10, 'Financial Summary (Base Currency)', ln=True)
+    pdf.ln(2)
+
+    # Calculate Totals
+    total_dep = sum(float(r.data.functional_amount or 0) for r in results_to_process if r.data.category == "Deposit")
+    total_exp = sum(float(r.data.functional_amount or 0) for r in results_to_process if r.data.category != "Deposit")
+    net_bal = total_dep - total_exp
+    
+    # Summary Table Helper
+    pdf.set_font('helvetica', 'B', 10)
+    pdf.set_fill_color(245, 245, 250)
+    pdf.set_text_color(0)
+    
+    summary_w = 60
+    val_w = 50
+    
+    # Title row
+    pdf.cell(summary_w, 10, ' Description', border=1, fill=True)
+    pdf.cell(val_w, 10, f' Total ({currency.upper()})', border=1, fill=True, ln=True)
+    
+    pdf.set_font('helvetica', '', 10)
+    # Deposit Row
+    pdf.cell(summary_w, 10, ' Total Deposits', border=1)
+    pdf.set_text_color(0, 120, 0)
+    pdf.cell(val_w, 10, f' {total_dep:,.3f}', border=1, ln=True, align='R')
+    
+    # Expense Row
+    pdf.set_text_color(0)
+    pdf.cell(summary_w, 10, ' Total Expenses', border=1)
+    pdf.set_text_color(180, 0, 0)
+    pdf.cell(val_w, 10, f' {total_exp:,.3f}', border=1, ln=True, align='R')
+    
+    # Net Balance Row
+    pdf.set_font('helvetica', 'B', 10)
+    pdf.set_text_color(0)
+    pdf.cell(summary_w, 10, ' Final Net Balance', border=1, fill=True)
+    pdf.cell(val_w, 10, f' {net_bal:,.3f}', border=1, fill=True, ln=True, align='R')
 
     pdf.output(output_path)
