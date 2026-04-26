@@ -84,17 +84,24 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
             return float(s)
         except: return 0.0
 
-    # 2. Total Balance (D3)
+    # 2. Total Balance (F3) - Must use functional (normalized) amounts
     current_balance = 0
     for r in results_to_process:
         if not r.data: continue
-        current_balance += safe_float(r.data.deposit_amount)
-        current_balance -= safe_float(r.data.amount)
+        d = r.data
+        # Use functional_amount (normalized to base currency)
+        f_amt = safe_float(d.functional_amount if d.functional_amount is not None else d.base_amount)
+        if d.category == "Deposit":
+            current_balance += f_amt
+        else:
+            current_balance -= f_amt
             
     try:
-        ws['F3'] = current_balance
+        c_tot = ws['F3']
+        c_tot.value = current_balance
+        c_tot.number_format = get_accounting_fmt(str(currency).upper())
     except Exception as e:
-        print(f"ERROR: Failed to update D3 balance: {e}")
+        print(f"ERROR: Failed to update F3 balance: {e}")
 
     # 3. Data Rows (Starts at Row 5)
     start_data_row = 5
@@ -171,8 +178,13 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
 
             # FINAL AMOUNT & RATE (I & J)
             func_curr = str(d.functional_currency or currency).upper()
+            # V5: Use clean accounting format to prevent "Double Currency" bug
+            # Format: _("[$CUR-2]* #,##0.000_);_("[$CUR-2]* (#,##0.000);_("[$CUR-2]* "-"??_);_(@_)
+            def get_accounting_fmt(curr_code):
+                return f'_([$ {curr_code.upper()}]* #,##0.000_);_([$ {curr_code.upper()}]* (#,##0.000);_([$ {curr_code.upper()}]* "-"??_);_(@_)'
+
             c_func = ws.cell(row=row_idx, column=9, value=f_amt)
-            c_func.number_format = get_fmt(func_curr)
+            c_func.number_format = get_accounting_fmt(func_curr)
             
             c_frate = ws.cell(row=row_idx, column=10, value=safe_float(d.functional_rate or d.exchange_rate))
             c_frate.number_format = f'[$ {func_curr}] * 0.000000'
@@ -182,7 +194,8 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
             
             # BALANCE (L)
             c_bal = ws.cell(row=row_idx, column=12, value=running_balance) 
-            c_bal.number_format = '#,##0.000'
+            # Apply same professional alignment to Balance
+            c_bal.number_format = get_accounting_fmt(func_curr)
             
             # REMARKS (M)
             ws.cell(row=row_idx, column=13, value=str(d.remarks or "ok")) 
@@ -192,28 +205,28 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
             print(f"ERROR: Failed to process row {row_idx}: {e}")
             continue
 
-    # 4. TOTAL ROW (V5)
+    # 4. TEMPLATE TOTALS (V5 Fixed at Row 123)
     try:
-        total_row = row_idx + 1
-        ws.cell(row=total_row, column=2, value="TOTAL")
-        ws.cell(row=total_row, column=2).font = Font(bold=True)
-        
+        # The user has a designated Total row at 123
+        t_row = 123
         # SUBTOTAL Formulas (109 = SUM excluding hidden rows)
         # Column E: Original Deposit
-        ws.cell(row=total_row, column=5, value=f"=SUBTOTAL(109, E{start_data_row}:E{row_idx-1})")
+        ws.cell(row=t_row, column=5, value=f"=SUBTOTAL(109, E{start_data_row}:E{row_idx-1})")
         # Column F: Original Expense
-        ws.cell(row=total_row, column=6, value=f"=SUBTOTAL(109, F{start_data_row}:F{row_idx-1})")
+        ws.cell(row=t_row, column=6, value=f"=SUBTOTAL(109, F{start_data_row}:F{row_idx-1})")
         # Column I: Final Amount
-        ws.cell(row=total_row, column=9, value=f"=SUBTOTAL(109, I{start_data_row}:I{row_idx-1})")
+        ws.cell(row=t_row, column=9, value=f"=SUBTOTAL(109, I{start_data_row}:I{row_idx-1})")
         
-        # Apply bold and number format to totals
+        # Apply bold and accounting format to totals
+        func_curr = str(currency).upper() # Use functional currency for final totals
         for col in [5, 6, 9]:
-            c = ws.cell(row=total_row, column=col)
+            c = ws.cell(row=t_row, column=col)
             c.font = Font(bold=True)
-            c.number_format = '#,##0.000'
+            if col == 9:
+                c.number_format = get_accounting_fmt(func_curr)
+            else:
+                c.number_format = '#,##0.000' # Original columns stay numeric as currencies vary
     except Exception as e:
-        print(f"ERROR: Failed to add Total row: {e}")
-
-    # NOTE: No "Total" row added here — the template already has built-in total formulas
+        print(f"ERROR: Failed to update Template Total row 123: {e}")
 
     wb.save(output_path)
