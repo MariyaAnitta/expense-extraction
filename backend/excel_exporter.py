@@ -97,7 +97,8 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
         print(f"ERROR: Failed to update D3 balance: {e}")
 
     # 3. Data Rows (Starts at Row 5)
-    row_idx = 5
+    start_data_row = 5
+    row_idx = start_data_row
     running_balance = 0
     
     for result in results_to_process:
@@ -114,10 +115,13 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
             exp_val = f_amt if not is_dep else 0
             running_balance = running_balance + dep_val - exp_val
             
-            # Original Amount + Currency for Columns E & F
+            # Currency formatting patterns
+            # Pattern: [$CODE] * #,##0.000 ensures code is left and amount is right aligned
+            def get_fmt(curr_code):
+                return f'[$ {curr_code.upper()}] * #,##0.000'
+
             orig_amt = safe_float(d.deposit_amount if is_dep else d.amount)
             orig_curr = str(d.currency or currency).upper()
-            orig_display = f"{orig_amt:,.3f} {orig_curr}" if orig_amt != 0 else ""
 
             # DATE (A)
             if d.date:
@@ -140,29 +144,38 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
                 ws.cell(row=row_idx, column=3, value=str(sub_type))
                 ws.cell(row=row_idx, column=4, value="")
                 # ORIGINAL DEPOSIT (E)
-                ws.cell(row=row_idx, column=5, value=orig_display)
+                c_orig = ws.cell(row=row_idx, column=5, value=orig_amt)
+                c_orig.number_format = get_fmt(orig_curr)
                 ws.cell(row=row_idx, column=6, value="")
             else:
                 ws.cell(row=row_idx, column=3, value="")
                 ws.cell(row=row_idx, column=4, value=str(sub_type))
                 # ORIGINAL EXPENSE (F)
                 ws.cell(row=row_idx, column=5, value="")
-                ws.cell(row=row_idx, column=6, value=orig_display)
+                c_orig = ws.cell(row=row_idx, column=6, value=orig_amt)
+                c_orig.number_format = get_fmt(orig_curr)
 
             # AUDITED AMOUNT & RATE (G & H)
             target_curr = str(d.target_currency or currency).upper()
             if orig_curr != target_curr or d.is_manual_rate:
                 t_amt = safe_float(d.base_amount)
-                ws.cell(row=row_idx, column=7, value=f"{t_amt:,.3f} {target_curr}")
-                ws.cell(row=row_idx, column=8, value=safe_float(d.exchange_rate))
+                c_audit = ws.cell(row=row_idx, column=7, value=t_amt)
+                c_audit.number_format = get_fmt(target_curr)
+                
+                c_rate = ws.cell(row=row_idx, column=8, value=safe_float(d.exchange_rate))
+                # High precision + Currency label
+                c_rate.number_format = f'[$ {target_curr}] * 0.000000'
             else:
                 ws.cell(row=row_idx, column=7, value="")
                 ws.cell(row=row_idx, column=8, value="")
 
             # FINAL AMOUNT & RATE (I & J)
             func_curr = str(d.functional_currency or currency).upper()
-            ws.cell(row=row_idx, column=9, value=f"{f_amt:,.3f} {func_curr}")
-            ws.cell(row=row_idx, column=10, value=safe_float(d.functional_rate or d.exchange_rate))
+            c_func = ws.cell(row=row_idx, column=9, value=f_amt)
+            c_func.number_format = get_fmt(func_curr)
+            
+            c_frate = ws.cell(row=row_idx, column=10, value=safe_float(d.functional_rate or d.exchange_rate))
+            c_frate.number_format = f'[$ {func_curr}] * 0.000000'
             
             # RECEIVED BY (K)
             ws.cell(row=row_idx, column=11, value=str(d.received_by or ""))
@@ -178,6 +191,28 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
         except Exception as e:
             print(f"ERROR: Failed to process row {row_idx}: {e}")
             continue
+
+    # 4. TOTAL ROW (V5)
+    try:
+        total_row = row_idx + 1
+        ws.cell(row=total_row, column=2, value="TOTAL")
+        ws.cell(row=total_row, column=2).font = Font(bold=True)
+        
+        # SUBTOTAL Formulas (109 = SUM excluding hidden rows)
+        # Column E: Original Deposit
+        ws.cell(row=total_row, column=5, value=f"=SUBTOTAL(109, E{start_data_row}:E{row_idx-1})")
+        # Column F: Original Expense
+        ws.cell(row=total_row, column=6, value=f"=SUBTOTAL(109, F{start_data_row}:F{row_idx-1})")
+        # Column I: Final Amount
+        ws.cell(row=total_row, column=9, value=f"=SUBTOTAL(109, I{start_data_row}:I{row_idx-1})")
+        
+        # Apply bold and number format to totals
+        for col in [5, 6, 9]:
+            c = ws.cell(row=total_row, column=col)
+            c.font = Font(bold=True)
+            c.number_format = '#,##0.000'
+    except Exception as e:
+        print(f"ERROR: Failed to add Total row: {e}")
 
     # NOTE: No "Total" row added here — the template already has built-in total formulas
 

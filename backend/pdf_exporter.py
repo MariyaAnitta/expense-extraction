@@ -135,13 +135,15 @@ def generate_pdf_log(results: List[ExtractionResult], output_path: str, currency
             # Audited
             audit_disp = f"{target_amt:,.3f} {target_curr}" if (orig_curr != target_curr) else ""
             pdf.cell(w['audit'], 10, clean_text(audit_disp), border=1, align='R')
-            pdf.cell(w['rate'], 10, clean_text(f"{float(d.exchange_rate or 1):.4f}" if audit_disp else ""), border=1, align='C')
+            # 6 decimal places + Currency label
+            pdf.cell(w['rate'], 10, clean_text(f"{target_curr} {float(d.exchange_rate or 1):.6f}" if audit_disp else ""), border=1, align='C')
             
             # Final
             pdf.set_font('helvetica', 'B', 8)
             pdf.cell(w['final'], 10, clean_text(f"{f_amt:,.3f} {func_curr}"), border=1, align='R')
             pdf.set_font('helvetica', '', 8)
-            pdf.cell(w['rate'], 10, clean_text(f"{float(d.functional_rate or 1):.4f}"), border=1, align='C')
+            # 6 decimal places + Currency label
+            pdf.cell(w['rate'], 10, clean_text(f"{func_curr} {float(d.functional_rate or 1):.6f}"), border=1, align='C')
             
             pdf.cell(w['recv'], 10, clean_text(str(d.received_by or '')[:20]), border=1)
             
