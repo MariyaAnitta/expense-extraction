@@ -43,11 +43,12 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
             except:
                 return datetime.max
 
-    # Filter and Sort results by date
+    # Filter and Sort results
+    # Priority: 1. Opening Balance (always top), 2. Date
     results_to_process = [r for r in results if r.data]
     results_to_process.sort(key=lambda x: (
-        parse_date(x.data.date),
-        0 if x.data.description and "Opening balance" in str(x.data.description) else 1
+        0 if (x.data.description and "opening balance" in str(x.data.description).lower()) else 1,
+        parse_date(x.data.date)
     ))
 
     # --- Determine the year and date range from the receipt dates ---
@@ -83,6 +84,13 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
             s = str(val).replace(currency, '').replace('BHD', '').replace(',', '').strip()
             return float(s)
         except: return 0.0
+
+    # Define formatting utilities at the top to avoid scope/NameErrors
+    def get_accounting_fmt(curr_code):
+        # Professional Accounting: Currency on left (* fills space), number on right.
+        # Semicolon handles negative sign positioning (INR  -1,000.000)
+        c = str(curr_code).upper()
+        return f'[$ {c}]* #,##0.000;[$ {c}]* -#,##0.000'
 
     # 2. Total Balance (F3) - Must use functional (normalized) amounts
     current_balance = 0
@@ -122,11 +130,6 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
             exp_val = f_amt if not is_dep else 0
             running_balance = running_balance + dep_val - exp_val
             
-            # Standard accounting format: [CurrencyCode] aligned left, amount right
-            def get_accounting_fmt(curr_code):
-                # Using the [$ ] syntax is the most robust way to handle multi-currency for Excel
-                return f'[$ {curr_code.upper()}] * #,##0.000'
-
             orig_amt = safe_float(d.deposit_amount if is_dep else d.amount)
             orig_curr = str(d.currency or currency).upper()
 
@@ -167,7 +170,7 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
             if orig_curr != target_curr or d.is_manual_rate:
                 t_amt = safe_float(d.base_amount)
                 c_audit = ws.cell(row=row_idx, column=7, value=t_amt)
-                c_audit.number_format = get_fmt(target_curr)
+                c_audit.number_format = get_accounting_fmt(target_curr)
                 
                 c_rate = ws.cell(row=row_idx, column=8, value=safe_float(d.exchange_rate))
                 # High precision + Currency label
@@ -221,27 +224,18 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
                 total_exp += val
 
         # In Row 123, we prioritize the BASE CURRENCY TOTALS as requested by the user
-        # Column E/F are "Original", but user wants them to show the base currency sum for correctness
         ws.cell(row=t_row, column=5, value=total_dep)
         ws.cell(row=t_row, column=6, value=total_exp)
         
-        # Column I is the standard Final Amount total
-        ws.cell(row=t_row, column=9, value=total_dep - total_exp) # Net change logic? 
-        # Actually, Column I usually sums the whole functional column? 
-        # Dashboard shows Net Balance (Deposits - Expenses). 
-        # But if the user wants "Total Expense", they usually mean the Absolute sum of expenses.
-        # Let's check Row 123 Column I's purpose in the template. 
-        # Usually it's "Summary" or "Total".
-        ws.cell(row=t_row, column=9, value=total_dep - total_exp)
+        # User requested NO balance/total in Column I for the total row
+        ws.cell(row=t_row, column=9, value="")
         
         # Apply bold and accounting format to totals
-        for col in [5, 6, 9]:
+        for col in [5, 6]:
             c = ws.cell(row=t_row, column=col)
             c.font = Font(bold=True)
             c.number_format = get_accounting_fmt(func_curr)
     except Exception as e:
         print(f"ERROR: Failed to update Template Total row 123: {e}")
-
-    wb.save(output_path)
 
     wb.save(output_path)
