@@ -178,23 +178,22 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
 
             # FINAL AMOUNT & RATE (I & J)
             func_curr = str(d.functional_currency or currency).upper()
-            # V5: Use clean accounting format to prevent "Double Currency" bug
-            # Format: _("[$CUR-2]* #,##0.000_);_("[$CUR-2]* (#,##0.000);_("[$CUR-2]* "-"??_);_(@_)
+            # V6: Professional Accounting Format (Prefix CUR, Right Aligned Amount)
+            # We use a simpler format to avoid conflicts with template suffixes
             def get_accounting_fmt(curr_code):
-                return f'_([$ {curr_code.upper()}]* #,##0.000_);_([$ {curr_code.upper()}]* (#,##0.000);_([$ {curr_code.upper()}]* "-"??_);_(@_)'
+                return f'"$ "{curr_code.upper()}* #,##0.000'
 
             c_func = ws.cell(row=row_idx, column=9, value=f_amt)
             c_func.number_format = get_accounting_fmt(func_curr)
             
             c_frate = ws.cell(row=row_idx, column=10, value=safe_float(d.functional_rate or d.exchange_rate))
-            c_frate.number_format = f'[$ {func_curr}] * 0.000000'
+            c_frate.number_format = f'"{func_curr} "0.000000'
             
             # RECEIVED BY (K)
             ws.cell(row=row_idx, column=11, value=str(d.received_by or ""))
             
             # BALANCE (L)
             c_bal = ws.cell(row=row_idx, column=12, value=running_balance) 
-            # Apply same professional alignment to Balance
             c_bal.number_format = get_accounting_fmt(func_curr)
             
             # REMARKS (M)
@@ -205,28 +204,33 @@ def generate_petty_cash_log(results: List[ExtractionResult], output_path: str, c
             print(f"ERROR: Failed to process row {row_idx}: {e}")
             continue
 
-    # 4. TEMPLATE TOTALS (V5 Fixed at Row 123)
+    # 4. COLUMN WIDTHS (V6 - Fix "####")
+    for col_let in ['E', 'F', 'G', 'I', 'L']:
+        ws.column_dimensions[col_let].width = 22
+
+    # 5. TEMPLATE TOTALS (V5 Fixed at Row 123)
     try:
-        # The user has a designated Total row at 123
         t_row = 123
-        # SUBTOTAL Formulas (109 = SUM excluding hidden rows)
-        # Column E: Original Deposit
-        ws.cell(row=t_row, column=5, value=f"=SUBTOTAL(109, E{start_data_row}:E{row_idx-1})")
-        # Column F: Original Expense
-        ws.cell(row=t_row, column=6, value=f"=SUBTOTAL(109, F{start_data_row}:F{row_idx-1})")
-        # Column I: Final Amount
-        ws.cell(row=t_row, column=9, value=f"=SUBTOTAL(109, I{start_data_row}:I{row_idx-1})")
+        func_curr = str(currency).upper() 
+        
+        # formulas
+        ws.cell(row=t_row, column=5, value=f"=SUBTOTAL(109, E5:E{row_idx-1})")
+        ws.cell(row=t_row, column=6, value=f"=SUBTOTAL(109, F5:F{row_idx-1})")
+        ws.cell(row=t_row, column=9, value=f"=SUBTOTAL(109, I5:I{row_idx-1})")
         
         # Apply bold and accounting format to totals
-        func_curr = str(currency).upper() # Use functional currency for final totals
         for col in [5, 6, 9]:
             c = ws.cell(row=t_row, column=col)
             c.font = Font(bold=True)
             if col == 9:
+                # Final Amount total MUST have currency prefix
                 c.number_format = get_accounting_fmt(func_curr)
             else:
-                c.number_format = '#,##0.000' # Original columns stay numeric as currencies vary
+                # For original, we just show numbers as currencies vary, but we bold them
+                c.number_format = '#,##0.000'
     except Exception as e:
         print(f"ERROR: Failed to update Template Total row 123: {e}")
+
+    wb.save(output_path)
 
     wb.save(output_path)
