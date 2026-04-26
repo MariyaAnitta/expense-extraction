@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, query, orderBy, deleteDoc, doc, where } from 'firebase/firestore';
-import { Users, UserPlus, Trash2, Mail, Shield, CheckCircle2, LayoutDashboard, Download, FileText, Globe, X } from 'lucide-react';
+import { Users, UserPlus, Trash2, Mail, Shield, CheckCircle2, LayoutDashboard, Download, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
 
