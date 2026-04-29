@@ -117,9 +117,10 @@ class ZohoClient:
         if not paid_through_account_id:
              raise Exception("Failed to find a valid Cash/Bank Account (Paid Through) in Zoho Chart of Accounts")
              
-        # Safely parse the amount, removing commas if necessary
-        raw_amt = str(data.base_amount or data.amount or 0).replace(',', '')
-        amount = float(raw_amt)
+        # Safely parse the amount — prefer functional_amount (entity base currency like BHD)
+        # over base_amount (target conversion currency like USD)
+        raw_amt = str(data.functional_amount or data.base_amount or data.amount or 0).replace(',', '')
+        amount = abs(float(raw_amt))  # abs() to prevent negative amounts (e.g. balance values)
         
         # Safely parse date to strict YYYY-MM-DD format as required by Zoho
         zoho_date = ""
@@ -129,13 +130,25 @@ class ZohoClient:
                 zoho_date = parsed.strftime('%Y-%m-%d')
         except:
             pass
+        
+        # Build a rich description for the Zoho expense
+        desc_parts = []
+        if data.sub_type or data.category:
+            desc_parts.append(data.sub_type or data.category)
+        if data.description:
+            desc_parts.append(data.description)
+        if data.received_by:
+            desc_parts.append(f"Vendor: {data.received_by}")
+        if data.currency and data.amount:
+            desc_parts.append(f"Original: {data.currency} {data.amount}")
+        description = " | ".join(desc_parts) if desc_parts else "Expense from Portal"
             
         payload = {
             "account_id": account_id,
             "paid_through_account_id": paid_through_account_id,
             "amount": amount,
-            "description": f"{data.category or 'Expense'} - {data.description or 'Receipt'}",
-            "reference_number": data.transaction_no or "Portal Sync"
+            "description": description,
+            "reference_number": data.transaction_no or ""
         }
         
         # Only add date if valid, else Zoho falls back to today
