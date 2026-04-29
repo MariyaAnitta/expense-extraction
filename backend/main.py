@@ -605,9 +605,9 @@ async def add_manual(
             "data": data_dict,
             "upload_time": time.time(),
             "local_path": None, # No file for manual entries
-            "is_verified": True if role == "leader" else False,
+            "is_verified": True if role in ["leader", "admin"] else False,
             "user_verified": True,
-            "leader_verified": True if role == "leader" else False,
+            "leader_verified": True if role in ["leader", "admin"] else False,
             "admin_verified": True if role == "admin" else False,
             "user_id": user_id,
             "team_id": team_id.lower() if team_id else "general",

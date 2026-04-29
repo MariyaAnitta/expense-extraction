@@ -342,7 +342,8 @@ export default function App() {
           user_id: data.user_id,
           team_id: data.team_id,
           zoho_sync_status: data.zoho_sync_status,
-          zoho_invoice_id: data.zoho_invoice_id
+          zoho_invoice_id: data.zoho_invoice_id,
+          entity_id: data.entity_id
         };
       });
       
@@ -384,7 +385,7 @@ export default function App() {
       
       setQueue(prevQueue => {
         const optimisticItems = prevQueue.filter(item => 
-          item.file_id.startsWith('temp-') && 
+          (item.file_id.startsWith('temp-') || item.file_id.startsWith('manual-')) && 
           !sorted.some(real => real.file_name === item.file_name || real.file_name === item.file_name?.split('/').pop())
         );
         return [...sorted, ...optimisticItems];
