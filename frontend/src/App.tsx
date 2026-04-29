@@ -5,7 +5,7 @@ import {
   LayoutDashboard, ShieldCheck, 
   TrendingUp, Zap, FolderOpen,
   Plus, Loader2, Eye, X, Users,
-  BarChart3, Globe
+  BarChart3, Globe, CheckCircle2
 } from 'lucide-react';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
@@ -64,6 +64,8 @@ interface ExtractionResult {
   image_url?: string;
   user_id?: string;
   team_id?: string;
+  zoho_sync_status?: string;
+  zoho_invoice_id?: string;
 }
 
 // --- Components ---
@@ -336,7 +338,9 @@ export default function App() {
           image_url: data.image_url,
           upload_time: data.upload_time || 0,
           user_id: data.user_id,
-          team_id: data.team_id
+          team_id: data.team_id,
+          zoho_sync_status: data.zoho_sync_status,
+          zoho_invoice_id: data.zoho_invoice_id
         };
       });
       
@@ -673,6 +677,21 @@ export default function App() {
     } catch (error) {
       console.error("Failed to save extraction", error);
       alert("Failed to save changes.");
+    }
+  };
+
+  const handleSyncToZoho = async () => {
+    if (!selectedResult || !selectedResult.file_id) return;
+    try {
+      setIsProcessing(true);
+      const res = await axios.post(`${API_URL}/extractions/${selectedResult.file_id}/sync-zoho?role=${userRole}`);
+      alert(`Successfully synced to Zoho Books! Invoice ID: ${res.data.invoice_id}`);
+      // Snapshot will automatically update the UI since it's a Firestore listener
+    } catch (error: any) {
+      console.error("Zoho Sync Error", error);
+      alert(error.response?.data?.error || "Failed to sync with Zoho Books. Ensure credentials are valid.");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -1390,6 +1409,26 @@ export default function App() {
                              <div className="w-full py-4 bg-slate-100 text-slate-400 rounded-xl font-black text-[10px] text-center uppercase tracking-widest border border-dashed border-slate-200">
                                Verification Restricted to Team Leaders
                              </div>
+                           )}
+
+                           {/* Zoho Sync Button */}
+                           {selectedResult?.is_verified && (userRole === 'admin' || userRole === 'leader') && (
+                             <button 
+                               onClick={handleSyncToZoho}
+                               disabled={selectedResult.zoho_sync_status === 'SUCCESS'}
+                               className={cn(
+                                 "w-full py-4 rounded-xl font-black text-xs shadow-lg transition-all flex justify-center items-center gap-2",
+                                 selectedResult.zoho_sync_status === 'SUCCESS'
+                                   ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed" 
+                                   : "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:opacity-90"
+                               )}
+                             >
+                               {selectedResult.zoho_sync_status === 'SUCCESS' ? (
+                                 <><CheckCircle2 size={16} /> SYNCED TO ZOHO</>
+                               ) : (
+                                 <><Globe size={16} /> SYNC TO ZOHO BOOKS</>
+                               )}
+                             </button>
                            )}
 
                         </div>

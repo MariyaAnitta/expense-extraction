@@ -10,7 +10,8 @@ from firebase_config import db, bucket
 from processor import ReceiptProcessor
 from excel_exporter import generate_petty_cash_log
 from pdf_exporter import generate_pdf_log
-from models import ExtractionResult, ReceiptData
+from models import ExtractionResult, ReceiptData, ZohoConfig
+from zoho_client import ZohoClient
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import httpx
@@ -847,7 +848,81 @@ async def delete_entity(entity_id: str):
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 
+
+# --- ZOHO INTEGRATION (V5) ---
+def get_zoho_config(entity_id: str) -> Optional[ZohoConfig]:
+    """Fetch Zoho configuration for an entity from Firestore"""
+    if not entity_id or entity_id == "default":
+        return None
+    try:
+        doc = db.collection("entities").document(entity_id).get()
+        if doc.exists:
+            d = doc.to_dict()
+            zoho_data = d.get("zoho_config")
+            if zoho_data:
+                return ZohoConfig(**zoho_data)
+    except Exception as e:
+        print(f"Error fetching Zoho config for entity {entity_id}: {e}")
+    return None
+
+@app.post("/entities/{entity_id}/zoho-config")
+async def save_zoho_config(entity_id: str, config: ZohoConfig):
+    try:
+        db.collection("entities").document(entity_id).update({
+            "zoho_config": config.model_dump()
+        })
+        return {"status": "success", "message": "Zoho configuration saved successfully"}
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+@app.post("/extractions/{doc_id}/sync-zoho")
+async def sync_to_zoho(doc_id: str, role: str = "user"):
+    # RBAC: Only Admin and Leader can sync
+    if role not in ["admin", "leader"]:
+        return JSONResponse(status_code=403, content={"error": "Permission denied: Only Admins and Leaders can sync to Zoho"})
+
+    try:
+        # 1. Fetch extraction record
+        doc_ref = db.collection("extractions").document(doc_id)
+        doc = doc_ref.get()
+        if not doc.exists:
+            return JSONResponse(status_code=404, content={"error": "Extraction record not found"})
+        
+        data = doc.to_dict()
+        if not data.get("is_verified"):
+             return JSONResponse(status_code=400, content={"error": "Only verified records can be synced to Zoho"})
+        
+        extraction_data = ReceiptData(**data.get("data", {}))
+        entity_id = data.get("entity_id", "default")
+        
+        # 2. Get Zoho Config for the entity
+        zoho_config = get_zoho_config(entity_id)
+        if not zoho_config:
+            return JSONResponse(status_code=400, content={"error": f"Zoho Books is not configured for entity {entity_id}"})
+        
+        # 3. Trigger Sync
+        client = ZohoClient(zoho_config)
+        
+        # Decide whether to create invoice or expense based on category (or user preference)
+        # For now, let's stick to the user's specific request for Invoices
+        invoice_id = await client.create_invoice(extraction_data)
+        
+        # 4. Record success
+        update_info = {
+            "zoho_sync_status": "SUCCESS",
+            "zoho_invoice_id": invoice_id,
+            "zoho_sync_time": time.time()
+        }
+        doc_ref.update(update_info)
+        
+        return {"status": "success", "invoice_id": invoice_id}
+        
+    except Exception as e:
+        print(f"Zoho Sync Error for {doc_id}: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 @app.post("/create-user")
+
 async def create_user(req: UserCreate):
     try:
         from firebase_config import auth as admin_auth

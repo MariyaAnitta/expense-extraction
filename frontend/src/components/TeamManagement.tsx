@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, query, orderBy, deleteDoc, doc, where } from 'firebase/firestore';
-import { Users, UserPlus, Trash2, Mail, Shield, CheckCircle2, LayoutDashboard, Download, FileText } from 'lucide-react';
+import { Users, UserPlus, Trash2, Mail, Shield, CheckCircle2, LayoutDashboard, Download, FileText, Settings2, RefreshCcw, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import axios from 'axios';
 
@@ -51,6 +51,15 @@ export default function TeamManagement({ userRole, userTeam, userEntity, onViewD
   const [entityCurrency, setEntityCurrency] = useState('BHD');
   const [entitySymbol, setEntitySymbol] = useState('');
   const [editingEntityId, setEditingEntityId] = useState<string | null>(null);
+  const [showZohoModal, setShowZohoModal] = useState(false);
+  const [selectedEntityForZoho, setSelectedEntityForZoho] = useState<any>(null);
+  const [zohoConfig, setZohoConfig] = useState({
+    client_id: '',
+    client_secret: '',
+    refresh_token: '',
+    org_id: '',
+    dc_domain: 'zoho.com'
+  });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -221,6 +230,32 @@ export default function TeamManagement({ userRole, userTeam, userEntity, onViewD
     setEntitySymbol(entity.symbol);
     // Scroll to form
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleOpenZoho = (entity: any) => {
+    setSelectedEntityForZoho(entity);
+    setZohoConfig(entity.zoho_config || {
+      client_id: '',
+      client_secret: '',
+      refresh_token: '',
+      org_id: '',
+      dc_domain: 'zoho.com'
+    });
+    setShowZohoModal(true);
+  };
+
+  const handleSaveZoho = async () => {
+    if (!selectedEntityForZoho) return;
+    setLoading(true);
+    try {
+      await axios.post(`${API_URL}/entities/${selectedEntityForZoho.id}/zoho-config`, zohoConfig);
+      setSuccess("Zoho configuration saved successfully");
+      setTimeout(() => setShowZohoModal(false), 1500);
+    } catch (err: any) {
+      setError(err.response?.data?.error || "Failed to save Zoho config");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -582,7 +617,104 @@ export default function TeamManagement({ userRole, userTeam, userEntity, onViewD
         )}
       </AnimatePresence>
 
+      {/* Zoho Integration Modal */}
+      {showZohoModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 overflow-hidden">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowZohoModal(false)} />
+          <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-2xl relative z-10 flex flex-col max-h-[90vh] border border-slate-100 overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="px-10 py-8 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-black text-slate-800">Zoho Books Integration</h2>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">{selectedEntityForZoho?.name}</p>
+              </div>
+              <button onClick={() => setShowZohoModal(false)} className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-all">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-10 overflow-y-auto space-y-6 flex-1 custom-scrollbar">
+              {error && <div className="p-4 bg-rose-50 text-rose-600 rounded-xl text-xs font-bold border border-rose-100">{error}</div>}
+              {success && <div className="p-4 bg-emerald-50 text-emerald-600 rounded-xl text-xs font-bold border border-emerald-100">{success}</div>}
+
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Client ID</label>
+                  <input 
+                    type="text" 
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-3 text-sm font-bold outline-none focus:ring-2 ring-indigo-100" 
+                    value={zohoConfig.client_id}
+                    onChange={e => setZohoConfig({...zohoConfig, client_id: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Client Secret</label>
+                  <input 
+                    type="password" 
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-3 text-sm font-bold outline-none focus:ring-2 ring-indigo-100" 
+                    value={zohoConfig.client_secret}
+                    onChange={e => setZohoConfig({...zohoConfig, client_secret: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Refresh Token</label>
+                  <textarea 
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-3 text-sm font-bold outline-none focus:ring-2 ring-indigo-100" 
+                    rows={2}
+                    value={zohoConfig.refresh_token}
+                    onChange={e => setZohoConfig({...zohoConfig, refresh_token: e.target.value})}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Organization ID</label>
+                    <input 
+                      type="text" 
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-3 text-sm font-bold outline-none focus:ring-2 ring-indigo-100" 
+                      value={zohoConfig.org_id}
+                      onChange={e => setZohoConfig({...zohoConfig, org_id: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Data Center Domain</label>
+                    <select 
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-3 text-sm font-bold outline-none focus:ring-2 ring-indigo-100 appearance-none"
+                      value={zohoConfig.dc_domain}
+                      onChange={e => setZohoConfig({...zohoConfig, dc_domain: e.target.value})}
+                    >
+                      <option value="zoho.com">US (zoho.com)</option>
+                      <option value="zoho.in">India (zoho.in)</option>
+                      <option value="zoho.eu">Europe (zoho.eu)</option>
+                      <option value="zoho.com.au">Australia (zoho.com.au)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100/30">
+                <p className="text-[10px] text-indigo-600 font-medium leading-relaxed">
+                  <strong>How to get these?</strong> Create an application in the <a href="https://api-console.zoho.com/" target="_blank" rel="noreferrer" className="underline font-bold">Zoho API Console</a>. 
+                  Scope needed: <code>ZohoBooks.fullaccess.all</code>.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 px-10 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-4 shrink-0">
+              <button type="button" onClick={() => setShowZohoModal(false)} className="px-6 py-3 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors">Cancel</button>
+              <button 
+                type="button"
+                onClick={handleSaveZoho}
+                disabled={loading}
+                className="px-8 py-3 bg-indigo-600 text-white rounded-full font-black text-sm hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg shadow-indigo-100"
+              >
+                {loading ? <RefreshCcw className="animate-spin" size={16} /> : <><Settings2 size={16} /> Save Config</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50/50">

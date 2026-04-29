@@ -1,6 +1,15 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
+
+class ZohoConfig(BaseModel):
+    client_id: str
+    client_secret: str
+    refresh_token: str
+    org_id: str
+    dc_domain: str = "zoho.com"
+    default_customer_id: Optional[str] = None
+    default_vendor_id: Optional[str] = None
 
 class ReceiptData(BaseModel):
     date: Optional[str] = Field(None, description="Date of the transaction (YYYY-MM-DD)")
