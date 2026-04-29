@@ -695,6 +695,33 @@ export default function App() {
     }
   };
 
+  const handleBulkSyncToZoho = async () => {
+    const verifiedToSync = queue.filter(r => r.is_verified && r.zoho_sync_status !== 'SUCCESS');
+    if (verifiedToSync.length === 0) {
+      alert("No pending verified receipts to sync to Zoho.");
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to sync ${verifiedToSync.length} verified receipts to Zoho Books?`)) return;
+
+    setIsProcessing(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const item of verifiedToSync) {
+      try {
+        await axios.post(`${API_URL}/extractions/${item.file_id}/sync-zoho?role=${userRole}`);
+        successCount++;
+      } catch (err) {
+        console.error(`Failed to sync ${item.file_id}`, err);
+        failCount++;
+      }
+    }
+
+    setIsProcessing(false);
+    alert(`Bulk Sync Complete!\nSuccessfully synced: ${successCount}\nFailed: ${failCount}`);
+  };
+
   const handleDataChange = async (key: keyof ReceiptData, value: any) => {
     if (!selectedResult || !selectedResult.data) return;
     
@@ -886,6 +913,17 @@ export default function App() {
               {isProcessing ? <Loader2 className="animate-spin" size={18} /> : <Zap size={18} fill="currentColor" />}
               {isProcessing ? 'Analyzing...' : 'Analyze All'}
             </button>
+
+            {(userRole === 'admin' || userRole === 'leader') && (
+              <button 
+                onClick={handleBulkSyncToZoho} 
+                disabled={isProcessing || queue.filter(r => r.is_verified && r.zoho_sync_status !== 'SUCCESS').length === 0} 
+                className="px-5 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full font-black tracking-wide text-[10px] hover:opacity-90 transition-all flex items-center gap-2 shadow-lg shadow-blue-100 disabled:opacity-50 disabled:from-slate-400 disabled:to-slate-500"
+              >
+                {isProcessing ? <Loader2 className="animate-spin" size={14} /> : <Globe size={14} />} 
+                SYNC ZOHO
+              </button>
+            )}
 
             <button onClick={exportToExcel} disabled={queue.filter(r => r.status === 'COMPLETED').length === 0} className="px-5 py-3 bg-emerald-500 text-white rounded-full font-black tracking-wide text-[10px] hover:bg-emerald-600 transition-all flex items-center gap-2 shadow-lg shadow-emerald-100">
               <Download size={14} /> EXCEL
