@@ -348,25 +348,30 @@ export default function App() {
       // Pure JS filtering for Role-Based isolation (Robust & Zero-Index)
       let filtered = allResults;
       
+      // CRITICAL: Entity Isolation Gate
+      // Ensure we only see records belonging to our entity (or current drill-down entity)
+      const currentEntityId = userData?.entity_id || "default";
+      filtered = filtered.filter(r => (r.entity_id || "default") === currentEntityId);
+      
       if (userRole === "admin") {
         if (userFilter) {
-          filtered = allResults.filter(r => r.user_id === userFilter || r.user_id === 'automation');
+          filtered = filtered.filter(r => r.user_id === userFilter || r.user_id === 'automation');
         } else if (teamFilter === 'Admin Personal') {
-          filtered = allResults.filter(r => r.user_id === authUser.uid);
+          filtered = filtered.filter(r => r.user_id === authUser.uid);
         } else if (teamFilter !== 'Global') {
-          filtered = allResults.filter(r => r.team_id?.toLowerCase() === teamFilter.toLowerCase());
+          filtered = filtered.filter(r => r.team_id?.toLowerCase() === teamFilter.toLowerCase());
         }
       } else if (userRole === "leader") {
         if (userFilter) {
           // Drill Down: Selected User + Team Automation
-          filtered = allResults.filter(r => r.user_id === userFilter || r.user_id === 'automation');
+          filtered = filtered.filter(r => r.user_id === userFilter || r.user_id === 'automation');
         } else {
           // Personal: Leader's Own + Team Automation (No teammate receipts)
-          filtered = allResults.filter(r => r.user_id === authUser.uid || r.user_id === 'automation');
+          filtered = filtered.filter(r => r.user_id === authUser.uid || r.user_id === 'automation');
         }
       } else if (userRole === "user") {
         // Regular User: Own + Team Automation
-        filtered = allResults.filter(r => r.user_id === authUser.uid || r.user_id === 'automation');
+        filtered = filtered.filter(r => r.user_id === authUser.uid || r.user_id === 'automation');
       }
 
       const sorted = filtered.sort((a, b) => (b.upload_time || 0) - (a.upload_time || 0));
@@ -668,7 +673,8 @@ export default function App() {
         // V2 Fix: If Leader is on a member's dashboard, attribute to that member
         const targetUserId = userFilter || authUser?.uid || "unknown";
         const tid = userData?.team_id || "General";
-        await axios.post(`${API_URL}/add-manual?user_id=${targetUserId}&team_id=${tid}&role=${userRole}`, selectedResult.data);
+        const eid = userData?.entity_id || "default";
+        await axios.post(`${API_URL}/add-manual?user_id=${targetUserId}&team_id=${tid}&entity_id=${eid}&role=${userRole}`, selectedResult.data);
         // If it was a local temporary entry, we keep it in the queue which will sync from DB
         // If it was the specific "draft-manual" legacy object, clear it.
         if (selectedResult.file_id === "draft-manual") setSelectedResult(null);

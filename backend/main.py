@@ -324,7 +324,7 @@ async def upload_batch(
                 "status": "QUEUED",
                 "upload_time": time.time(),
                 "user_id": user_id,
-                "team_id": team_id,
+                "team_id": team_id.lower() if team_id else "general",
                 "entity_id": entity_id,
                 "is_verified": False,
                 "data": None
@@ -424,7 +424,7 @@ async def upload_automation(
             "status": "QUEUED",
             "upload_time": time.time(),
             "user_id": user_id,
-            "team_id": team_id,
+            "team_id": team_id.lower() if team_id else "global",
             "entity_id": entity_id,
             "is_verified": False,
             "data": None
@@ -535,7 +535,13 @@ async def update_extraction(doc_id: str, data: ReceiptData, role: str = "user"):
         return {"status": "error", "message": str(e)}
 
 @app.post("/add-manual")
-async def add_manual(data: Optional[ReceiptData] = None, user_id: Optional[str] = None, team_id: Optional[str] = None, role: str = "user"):
+async def add_manual(
+    data: Optional[ReceiptData] = None, 
+    user_id: Optional[str] = None, 
+    team_id: Optional[str] = None, 
+    entity_id: Optional[str] = None,
+    role: str = "user"
+):
     """Create a manual entry for accounting, either from default or from frontend draft."""
     try:
         if data:
@@ -556,18 +562,21 @@ async def add_manual(data: Optional[ReceiptData] = None, user_id: Optional[str] 
             
         # V2/V4 Fix: Inherit currency and entity from the office if it's a manual entry
         uid_for_ent = user_id or "unknown"
-        inherited_entity_id = "default"
+        inherited_entity_id = entity_id or "default"
         target_currency = "BHD"
         
-        if uid_for_ent != "unknown":
+        # Resolve entity and currency if not explicitly provided
+        if inherited_entity_id == "default" and uid_for_ent != "unknown":
             u_doc = db.collection("users").document(uid_for_ent).get()
             if u_doc.exists:
                 e_id = u_doc.to_dict().get("entity_id")
                 if e_id and e_id != "default":
                     inherited_entity_id = e_id
-                    target_currency = get_entity_currency(e_id)
-                    if not data: # Only set default currency if it's a blank manual entry
-                        data_dict["currency"] = target_currency
+        
+        if inherited_entity_id != "default":
+            target_currency = get_entity_currency(inherited_entity_id)
+            if not data: # Only set default currency if it's a blank manual entry
+                data_dict["currency"] = target_currency
 
         # V4: Fill FX data for manual entries
         orig_currency = data_dict.get("currency", target_currency)
@@ -600,10 +609,10 @@ async def add_manual(data: Optional[ReceiptData] = None, user_id: Optional[str] 
             "user_verified": True,
             "leader_verified": True if role == "leader" else False,
             "admin_verified": True if role == "admin" else False,
-                "user_id": user_id,
-                "team_id": team_id,
-                "entity_id": inherited_entity_id
-            })
+            "user_id": user_id,
+            "team_id": team_id.lower() if team_id else "general",
+            "entity_id": inherited_entity_id
+        })
         return {"status": "success", "id": doc_ref[1].id}
     except Exception as e:
         print(f"Error adding manual entry: {e}")
