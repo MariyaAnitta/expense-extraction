@@ -12,7 +12,7 @@ class ZohoClient:
         
     async def _refresh_access_token(self):
         """Exchange refresh token for a new access token"""
-        accounts_url = f"https://accounts.zoho.{self.config.dc_domain}/oauth/v2/token"
+        accounts_url = f"https://accounts.{self.config.dc_domain}/oauth/v2/token"
         
         params = {
             "refresh_token": self.config.refresh_token,
@@ -80,7 +80,9 @@ class ZohoClient:
         params = {"organization_id": self.config.org_id}
         
         # 1. Fetch Chart of Accounts to resolve Petty_Cash correctly
-        accounts_url = f"https://www.zohoapis.{self.config.dc_domain}/books/v3/chartofaccounts"
+        # dc_domain is 'zoho.com', 'zoho.in', etc. Zoho API domain maps: zoho.com -> zohoapis.com
+        api_suffix = self.config.dc_domain.replace('zoho.', 'zohoapis.')
+        accounts_url = f"https://www.{api_suffix}/books/v3/chartofaccounts"
         
         account_id = ""
         paid_through_account_id = ""
@@ -141,7 +143,7 @@ class ZohoClient:
             payload["date"] = zoho_date
 
         # 2. Create the actual Expense record
-        exp_url = f"https://www.zohoapis.{self.config.dc_domain}/books/v3/expenses"
+        exp_url = f"https://www.{api_suffix}/books/v3/expenses"
         
         async with httpx.AsyncClient() as client:
             response = await client.post(exp_url, params=params, headers=headers, json=payload)

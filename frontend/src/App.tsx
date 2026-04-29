@@ -5,7 +5,7 @@ import {
   LayoutDashboard, ShieldCheck, 
   TrendingUp, Zap, FolderOpen,
   Plus, Loader2, Eye, X, Users,
-  BarChart3, Globe, CheckCircle2
+  BarChart3, Globe
 } from 'lucide-react';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
@@ -138,6 +138,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [dbCategories, setDbCategories] = useState<any[]>([]);
   const [dbBanks, setDbBanks] = useState<any[]>([]);
+  const [isZohoSyncing, setIsZohoSyncing] = useState(false);
   const [currentView, setCurrentView] = useState<'board' | 'admin' | 'team' | 'analytics'>('board');
   
   const [userCurrency, setUserCurrency] = useState('BHD');
@@ -680,21 +681,6 @@ export default function App() {
     }
   };
 
-  const handleSyncToZoho = async () => {
-    if (!selectedResult || !selectedResult.file_id) return;
-    try {
-      setIsProcessing(true);
-      const res = await axios.post(`${API_URL}/extractions/${selectedResult.file_id}/sync-zoho?role=${userRole}`);
-      alert(`Successfully synced to Zoho Books! Invoice ID: ${res.data.invoice_id}`);
-      // Snapshot will automatically update the UI since it's a Firestore listener
-    } catch (error: any) {
-      console.error("Zoho Sync Error", error);
-      alert(error.response?.data?.error || "Failed to sync with Zoho Books. Ensure credentials are valid.");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
   const handleBulkSyncToZoho = async () => {
     const verifiedToSync = queue.filter(r => r.is_verified && r.zoho_sync_status !== 'SUCCESS');
     if (verifiedToSync.length === 0) {
@@ -704,7 +690,7 @@ export default function App() {
 
     if (!confirm(`Are you sure you want to sync ${verifiedToSync.length} verified receipts to Zoho Books?`)) return;
 
-    setIsProcessing(true);
+    setIsZohoSyncing(true);
     let successCount = 0;
     let failCount = 0;
 
@@ -718,7 +704,7 @@ export default function App() {
       }
     }
 
-    setIsProcessing(false);
+    setIsZohoSyncing(false);
     alert(`Bulk Sync Complete!\nSuccessfully synced: ${successCount}\nFailed: ${failCount}`);
   };
 
@@ -917,10 +903,10 @@ export default function App() {
             {(userRole === 'admin' || userRole === 'leader') && (
               <button 
                 onClick={handleBulkSyncToZoho} 
-                disabled={isProcessing || queue.filter(r => r.is_verified && r.zoho_sync_status !== 'SUCCESS').length === 0} 
+                disabled={isZohoSyncing || queue.filter(r => r.is_verified && r.zoho_sync_status !== 'SUCCESS').length === 0} 
                 className="px-5 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full font-black tracking-wide text-[10px] hover:opacity-90 transition-all flex items-center gap-2 shadow-lg shadow-blue-100 disabled:opacity-50 disabled:from-slate-400 disabled:to-slate-500"
               >
-                {isProcessing ? <Loader2 className="animate-spin" size={14} /> : <Globe size={14} />} 
+                {isZohoSyncing ? <Loader2 className="animate-spin" size={14} /> : <Globe size={14} />} 
                 SYNC ZOHO
               </button>
             )}
@@ -1449,25 +1435,6 @@ export default function App() {
                              </div>
                            )}
 
-                           {/* Zoho Sync Button */}
-                           {selectedResult?.is_verified && (userRole === 'admin' || userRole === 'leader') && (
-                             <button 
-                               onClick={handleSyncToZoho}
-                               disabled={selectedResult.zoho_sync_status === 'SUCCESS'}
-                               className={cn(
-                                 "w-full py-4 rounded-xl font-black text-xs shadow-lg transition-all flex justify-center items-center gap-2",
-                                 selectedResult.zoho_sync_status === 'SUCCESS'
-                                   ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed" 
-                                   : "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:opacity-90"
-                               )}
-                             >
-                               {selectedResult.zoho_sync_status === 'SUCCESS' ? (
-                                 <><CheckCircle2 size={16} /> SYNCED TO ZOHO</>
-                               ) : (
-                                 <><Globe size={16} /> SYNC TO ZOHO BOOKS</>
-                               )}
-                             </button>
-                           )}
 
                         </div>
                       </div>
