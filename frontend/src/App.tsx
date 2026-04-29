@@ -219,7 +219,7 @@ export default function App() {
                     const base = eData.currency || 'BHD';
                     setUserCurrency(base);
                     setEntityCurrencies(eData.active_currencies || [base, 'USD', 'SAR', 'INR']);
-                    setUserData(prev => ({ ...prev, entity_name: eData.name }));
+                    setUserData((prev: any) => ({ ...prev, entity_name: eData.name }));
                   }
               }
               
