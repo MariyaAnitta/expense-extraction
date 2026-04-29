@@ -915,6 +915,14 @@ async def sync_to_zoho(doc_id: str, role: str = "user"):
         # Route everything to Purchases -> Expenses
         expense_id = await client.create_expense(extraction_data)
         
+        # 3.5 Attach the receipt image if available
+        image_url = data.get("image_url")
+        if image_url and expense_id:
+            # Run attachment in background or wait? 
+            # I'll wait for confirmation but background is safer. 
+            # However, for reliability in this sync flow, I'll await it.
+            await client.attach_receipt(expense_id, image_url)
+        
         # 4. Record success
         update_info = {
             "zoho_sync_status": "SUCCESS",

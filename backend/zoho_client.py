@@ -162,6 +162,46 @@ class ZohoClient:
             response = await client.post(exp_url, params=params, headers=headers, json=payload)
             if response.status_code in [201, 200]:
                 res_data = response.json()
-                return res_data.get("expense", {}).get("expense_id")
+                expense_id = res_data.get("expense", {}).get("expense_id")
+                print(f"Zoho Expense Created: {expense_id}")
+                return expense_id
             else:
                 raise Exception(f"Zoho Expense Creation Failed: {response.status_code} - {response.text}")
+
+    async def attach_receipt(self, expense_id: str, image_url: str):
+        """Download receipt from Supabase/URL and upload to Zoho as an attachment"""
+        if not image_url or not expense_id or "manual" in image_url.lower():
+            return
+            
+        token = await self.get_valid_token()
+        api_suffix = self.config.dc_domain.replace('zoho.', 'zohoapis.')
+        attach_url = f"https://www.{api_suffix}/books/v3/expenses/{expense_id}/receipt"
+        
+        params = {"organization_id": self.config.org_id}
+        headers = {"Authorization": f"Zoho-oauthtoken {token}"}
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                # 1. Download the file from our storage
+                file_resp = await client.get(image_url)
+                if file_resp.status_code != 200:
+                    print(f"Failed to download image for Zoho attach: {file_resp.status_code}")
+                    return
+                
+                # 2. Extract filename from URL or default
+                filename = image_url.split('/')[-1].split('?')[0] or "receipt.jpg"
+                
+                # 3. Upload to Zoho
+                files = {
+                    'receipt': (filename, file_resp.content)
+                }
+                
+                # Note: Do NOT set Content-Type header manually for multipart uploads
+                res = await client.post(attach_url, params=params, headers=headers, files=files)
+                if res.status_code in [200, 201]:
+                    print(f"Successfully attached receipt to Zoho expense {expense_id}")
+                else:
+                    print(f"Failed to attach receipt to Zoho: {res.status_code} - {res.text}")
+                    
+        except Exception as e:
+            print(f"Error during Zoho receipt attachment: {e}")
