@@ -219,6 +219,7 @@ export default function App() {
                     const base = eData.currency || 'BHD';
                     setUserCurrency(base);
                     setEntityCurrencies(eData.active_currencies || [base, 'USD', 'SAR', 'INR']);
+                    setUserData(prev => ({ ...prev, entity_name: eData.name }));
                   }
               }
               
@@ -349,9 +350,14 @@ export default function App() {
       let filtered = allResults;
       
       // CRITICAL: Entity Isolation Gate
-      // Ensure we only see records belonging to our entity (or current drill-down entity)
+      // Robust check: matches by ID or Name (for legacy/automation records)
       const currentEntityId = userData?.entity_id || "default";
-      filtered = filtered.filter(r => (r.entity_id || "default") === currentEntityId);
+      const currentEntityName = userData?.entity_name?.trim().toLowerCase();
+      
+      filtered = filtered.filter(r => {
+        const recordEid = (r.entity_id || "default").trim().toLowerCase();
+        return recordEid === currentEntityId.toLowerCase() || (currentEntityName && recordEid === currentEntityName);
+      });
       
       if (userRole === "admin") {
         if (userFilter) {

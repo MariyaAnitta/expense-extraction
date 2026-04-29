@@ -325,7 +325,7 @@ async def upload_batch(
                 "upload_time": time.time(),
                 "user_id": user_id,
                 "team_id": team_id.lower() if team_id else "general",
-                "entity_id": entity_id,
+                "entity_id": resolve_entity_id(entity_id),
                 "is_verified": False,
                 "data": None
             })
@@ -425,7 +425,7 @@ async def upload_automation(
             "upload_time": time.time(),
             "user_id": user_id,
             "team_id": team_id.lower() if team_id else "global",
-            "entity_id": entity_id,
+            "entity_id": resolve_entity_id(entity_id),
             "is_verified": False,
             "data": None
         })
@@ -611,7 +611,7 @@ async def add_manual(
             "admin_verified": True if role == "admin" else False,
             "user_id": user_id,
             "team_id": team_id.lower() if team_id else "general",
-            "entity_id": inherited_entity_id
+            "entity_id": resolve_entity_id(inherited_entity_id)
         })
         return {"status": "success", "id": doc_ref[1].id}
     except Exception as e:
@@ -859,19 +859,44 @@ async def delete_entity(entity_id: str):
 
 
 # --- ZOHO INTEGRATION (V5) ---
+def resolve_entity_id(provided_id: str) -> str:
+    """
+    Resolve entity_id. Cases:
+    1. It's already a valid Firestore document ID.
+    2. It's an entity name (e.g. '10xDS - Bahrain') -> Resolve to doc ID.
+    """
+    if not provided_id or provided_id == "default":
+        return "default"
+    
+    # 1. Quick check: does the doc ID exist?
+    doc = db.collection("entities").document(provided_id).get()
+    if doc.exists:
+        return provided_id
+        
+    # 2. Try to resolve by name
+    # We strip and lower to be case-insensitive
+    entities = db.collection("entities").stream()
+    for e in entities:
+        e_data = e.to_dict()
+        if e_data.get("name", "").strip().lower() == provided_id.strip().lower():
+            return e.id
+            
+    return provided_id # Fallback to original
+
 def get_zoho_config(entity_id: str) -> Optional[ZohoConfig]:
     """Fetch Zoho configuration for an entity from Firestore"""
-    if not entity_id or entity_id == "default":
+    resolved_id = resolve_entity_id(entity_id)
+    if not resolved_id or resolved_id == "default":
         return None
     try:
-        doc = db.collection("entities").document(entity_id).get()
+        doc = db.collection("entities").document(resolved_id).get()
         if doc.exists:
             d = doc.to_dict()
             zoho_data = d.get("zoho_config")
             if zoho_data:
                 return ZohoConfig(**zoho_data)
     except Exception as e:
-        print(f"Error fetching Zoho config for entity {entity_id}: {e}")
+        print(f"Error fetching Zoho config for entity {resolved_id}: {e}")
     return None
 
 @app.post("/entities/{entity_id}/zoho-config")
