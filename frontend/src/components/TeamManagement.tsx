@@ -526,6 +526,9 @@ export default function TeamManagement({ userRole, userTeam, userEntity, onViewD
                            </div>
                         </div>
                         <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                           <button onClick={() => handleOpenZoho(ent)} title="Zoho Books Config" className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                              <Settings2 size={16} />
+                           </button>
                            <button onClick={() => handleEditEntity(ent)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
                               <LayoutDashboard size={16} />
                            </button>
