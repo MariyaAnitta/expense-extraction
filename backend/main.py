@@ -903,19 +903,18 @@ async def sync_to_zoho(doc_id: str, role: str = "user"):
         # 3. Trigger Sync
         client = ZohoClient(zoho_config)
         
-        # Decide whether to create invoice or expense based on category (or user preference)
-        # For now, let's stick to the user's specific request for Invoices
-        invoice_id = await client.create_invoice(extraction_data)
+        # Route everything to Purchases -> Expenses
+        expense_id = await client.create_expense(extraction_data)
         
         # 4. Record success
         update_info = {
             "zoho_sync_status": "SUCCESS",
-            "zoho_invoice_id": invoice_id,
+            "zoho_invoice_id": expense_id, # Keeping database field name to avoid frontend refactor
             "zoho_sync_time": time.time()
         }
         doc_ref.update(update_info)
         
-        return {"status": "success", "invoice_id": invoice_id}
+        return {"status": "success", "invoice_id": expense_id}
         
     except Exception as e:
         print(f"Zoho Sync Error for {doc_id}: {e}")

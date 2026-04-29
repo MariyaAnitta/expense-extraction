@@ -69,24 +69,68 @@ class ZohoClient:
             "reference_number": data.transaction_no
         }
 
-    async def create_invoice(self, data: ReceiptData) -> str:
-        """Create an invoice in Zoho Books"""
+    async def create_expense(self, data: ReceiptData) -> str:
+        """Create an expense in Zoho Books with dynamic account routing"""
         token = await self.get_valid_token()
-        url = f"https://www.zohoapis.{self.config.dc_domain}/books/v3/invoices"
-        
-        params = {"organization_id": self.config.org_id}
         headers = {
             "Authorization": f"Zoho-oauthtoken {token}",
             "Content-Type": "application/json"
         }
+        params = {"organization_id": self.config.org_id}
         
-        payload = self._map_to_invoice(data)
+        # 1. Fetch Chart of Accounts to resolve Petty_Cash correctly
+        accounts_url = f"https://www.zohoapis.{self.config.dc_domain}/books/v3/chartofaccounts"
+        
+        account_id = ""
+        paid_through_account_id = ""
         
         async with httpx.AsyncClient() as client:
-            response = await client.post(url, params=params, headers=headers, json=payload)
+            resp = await client.get(accounts_url, params=params, headers=headers)
+            if resp.status_code == 200:
+                accounts = resp.json().get("chartofaccounts", [])
+                
+                # Check how Petty_Cash was created. If they created it as Expense, map it to account_id
+                petty_exp = next((a for a in accounts if a["account_name"].lower() in ["petty_cash", "petty cash"] and "expense" in a["account_type"].lower()), None)
+                
+                if petty_exp:
+                    account_id = petty_exp["account_id"]
+                else:
+                    # Fallback generic expense
+                    exp = next((a for a in accounts if "expense" in a["account_type"].lower()), None)
+                    if exp: account_id = exp["account_id"]
+                
+                # We need a bank or cash account for 'paid_through'
+                # If they made Petty Cash as a bank/cash account, use it here instead!
+                petty_cash = next((a for a in accounts if a["account_name"].lower() in ["petty_cash", "petty cash"] and a["account_type"].lower() in ["cash", "bank"]), None)
+                if petty_cash:
+                    paid_through_account_id = petty_cash["account_id"]
+                else:
+                    # Fallback to any generic bank/cash account
+                    cash = next((a for a in accounts if a["account_type"].lower() in ["cash", "bank", "equity"]), None)
+                    if cash: paid_through_account_id = cash["account_id"]
+                    
+        if not account_id:
+             raise Exception("Failed to find a valid Expense Account in Zoho Chart of Accounts")
+        if not paid_through_account_id:
+             raise Exception("Failed to find a valid Cash/Bank Account (Paid Through) in Zoho Chart of Accounts")
+             
+        amount = float(data.base_amount or data.amount or 0)
+        payload = {
+            "account_id": account_id,
+            "paid_through_account_id": paid_through_account_id,
+            "date": data.date,
+            "amount": amount,
+            "description": f"{data.category or 'Expense'} - {data.description or 'Receipt'}",
+            "reference_number": data.transaction_no or "Portal Sync"
+        }
+
+        # 2. Create the actual Expense record
+        exp_url = f"https://www.zohoapis.{self.config.dc_domain}/books/v3/expenses"
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(exp_url, params=params, headers=headers, json=payload)
             if response.status_code in [201, 200]:
                 res_data = response.json()
-                invoice_id = res_data.get("invoice", {}).get("invoice_id")
-                return invoice_id
+                return res_data.get("expense", {}).get("expense_id")
             else:
-                raise Exception(f"Zoho Invoice Creation Failed: {response.status_code} - {response.text}")
+                raise Exception(f"Zoho Expense Creation Failed: {response.status_code} - {response.text}")
