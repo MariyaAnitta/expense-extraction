@@ -1,5 +1,6 @@
 import httpx
 import time
+import dateutil.parser
 from typing import Optional, Dict, Any
 from models import ReceiptData, ZohoConfig
 
@@ -114,15 +115,30 @@ class ZohoClient:
         if not paid_through_account_id:
              raise Exception("Failed to find a valid Cash/Bank Account (Paid Through) in Zoho Chart of Accounts")
              
-        amount = float(data.base_amount or data.amount or 0)
+        # Safely parse the amount, removing commas if necessary
+        raw_amt = str(data.base_amount or data.amount or 0).replace(',', '')
+        amount = float(raw_amt)
+        
+        # Safely parse date to strict YYYY-MM-DD format as required by Zoho
+        zoho_date = ""
+        try:
+            if data.date:
+                parsed = dateutil.parser.parse(data.date)
+                zoho_date = parsed.strftime('%Y-%m-%d')
+        except:
+            pass
+            
         payload = {
             "account_id": account_id,
             "paid_through_account_id": paid_through_account_id,
-            "date": data.date,
             "amount": amount,
             "description": f"{data.category or 'Expense'} - {data.description or 'Receipt'}",
             "reference_number": data.transaction_no or "Portal Sync"
         }
+        
+        # Only add date if valid, else Zoho falls back to today
+        if zoho_date:
+            payload["date"] = zoho_date
 
         # 2. Create the actual Expense record
         exp_url = f"https://www.zohoapis.{self.config.dc_domain}/books/v3/expenses"
