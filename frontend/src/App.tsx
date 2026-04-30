@@ -140,6 +140,7 @@ export default function App() {
   const [dbBanks, setDbBanks] = useState<any[]>([]);
   const [isZohoSyncing, setIsZohoSyncing] = useState(false);
   const [currentView, setCurrentView] = useState<'board' | 'admin' | 'team' | 'analytics'>('board');
+  const [isVerifying, setIsVerifying] = useState(false);
   
   const [userCurrency, setUserCurrency] = useState('BHD');
   const [entityCurrencies, setEntityCurrencies] = useState<string[]>(['BHD', 'USD', 'SAR', 'INR']);
@@ -673,7 +674,8 @@ export default function App() {
   };
 
   const handleConfirm = async () => {
-    if (!selectedResult || !selectedResult.data) return;
+    if (!selectedResult || !selectedResult.data || isVerifying) return;
+    setIsVerifying(true);
     try {
       if (selectedResult.file_id === "draft-manual" || selectedResult.file_id.startsWith('manual-')) {
         // Explicitly set IDs to avoid null propagation
@@ -691,6 +693,8 @@ export default function App() {
     } catch (error) {
       console.error("Failed to save extraction", error);
       alert("Failed to save changes.");
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -1434,11 +1438,12 @@ export default function App() {
                               onClick={handleConfirm}
                               disabled={selectedResult?.is_verified}
                               className={cn(
-                                "w-full py-4 rounded-xl font-black text-xs shadow-lg transition-all",
+                                "w-full py-4 rounded-xl font-black text-xs shadow-lg transition-all flex items-center justify-center gap-2",
                                 selectedResult?.is_verified
                                   ? "bg-emerald-500 text-white" : "bg-slate-900 text-white hover:bg-black"
                               )}
                             >
+                              {isVerifying ? <Loader2 className="animate-spin" size={14} /> : null}
                               {selectedResult?.is_verified ? 'VERIFIED' : (userRole === 'leader' ? 'APPROVE & VERIFY' : 'CONFIRM DETAILS')}
                             </button>
                            )}

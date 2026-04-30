@@ -923,6 +923,9 @@ async def sync_to_zoho(doc_id: str, role: str = "user"):
             return JSONResponse(status_code=404, content={"error": "Extraction record not found"})
         
         data = doc.to_dict()
+        if data.get("zoho_sync_status") == "SUCCESS":
+            return {"status": "already_synced", "invoice_id": data.get("zoho_invoice_id")}
+            
         if not data.get("is_verified"):
              return JSONResponse(status_code=400, content={"error": "Only verified records can be synced to Zoho"})
         

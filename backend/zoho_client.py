@@ -71,7 +71,7 @@ class ZohoClient:
         }
 
     async def create_expense(self, data: ReceiptData) -> str:
-        """Create an expense in Zoho Books with dynamic account routing"""
+        """Create an expense in Zoho Books with dynamic account routing and multi-currency support"""
         token = await self.get_valid_token()
         headers = {
             "Authorization": f"Zoho-oauthtoken {token}",
@@ -79,92 +79,112 @@ class ZohoClient:
         }
         params = {"organization_id": self.config.org_id}
         
-        # 1. Fetch Chart of Accounts to resolve Petty_Cash correctly
-        # dc_domain is 'zoho.com', 'zoho.in', etc. Zoho API domain maps: zoho.com -> zohoapis.com
+        # Resolve domains
         api_suffix = self.config.dc_domain.replace('zoho.', 'zohoapis.')
-        accounts_url = f"https://www.{api_suffix}/books/v3/chartofaccounts"
-        
-        account_id = ""
-        paid_through_account_id = ""
-        
+        base_url = f"https://www.{api_suffix}/books/v3"
+
+        # 1. Fetch Chart of Accounts and Currencies in parallel
         async with httpx.AsyncClient() as client:
-            resp = await client.get(accounts_url, params=params, headers=headers)
-            if resp.status_code == 200:
-                accounts = resp.json().get("chartofaccounts", [])
-                
-                # Check how Petty_Cash was created. If they created it as Expense, map it to account_id
-                petty_exp = next((a for a in accounts if a["account_name"].lower() in ["petty_cash", "petty cash"] and "expense" in a["account_type"].lower()), None)
-                
-                if petty_exp:
-                    account_id = petty_exp["account_id"]
-                else:
-                    # Fallback generic expense
-                    exp = next((a for a in accounts if "expense" in a["account_type"].lower()), None)
-                    if exp: account_id = exp["account_id"]
-                
-                # We need a bank or cash account for 'paid_through'
-                # If they made Petty Cash as a bank/cash account, use it here instead!
-                petty_cash = next((a for a in accounts if a["account_name"].lower() in ["petty_cash", "petty cash"] and a["account_type"].lower() in ["cash", "bank"]), None)
-                if petty_cash:
-                    paid_through_account_id = petty_cash["account_id"]
-                else:
-                    # Fallback to any generic bank/cash account
-                    cash = next((a for a in accounts if a["account_type"].lower() in ["cash", "bank", "equity"]), None)
-                    if cash: paid_through_account_id = cash["account_id"]
-                    
-        if not account_id:
-             raise Exception("Failed to find a valid Expense Account in Zoho Chart of Accounts")
-        if not paid_through_account_id:
-             raise Exception("Failed to find a valid Cash/Bank Account (Paid Through) in Zoho Chart of Accounts")
+            # Get Accounts
+            acc_resp = await client.get(f"{base_url}/chartofaccounts", params=params, headers=headers)
+            accounts = acc_resp.json().get("chartofaccounts", []) if acc_resp.status_code == 200 else []
+            
+            # Get Currencies
+            curr_resp = await client.get(f"{base_url}/settings/currencies", params=params, headers=headers)
+            currencies = curr_resp.json().get("currencies", []) if curr_resp.status_code == 200 else []
+
+            # Get Settings (to check base currency)
+            settings_resp = await client.get(f"{base_url}/settings/organization", params=params, headers=headers)
+            org_settings = settings_resp.json().get("organization", {}) if settings_resp.status_code == 200 else {}
+            base_currency_code = org_settings.get("currency_code", "BHD")
+
+        # 2. Map Expense Account
+        account_id = ""
+        target_name = (data.sub_type or data.category or "").lower().strip()
+        
+        # Try exact match first
+        match = next((a for a in accounts if a["account_name"].lower().strip() == target_name and "expense" in a["account_type"].lower()), None)
+        if not match:
+            # Try fuzzy match (contains)
+            match = next((a for a in accounts if target_name in a["account_name"].lower() and "expense" in a["account_type"].lower()), None)
+        
+        if match:
+            account_id = match["account_id"]
+        else:
+            # Fallback to Petty_Cash or first generic expense
+            petty_exp = next((a for a in accounts if a["account_name"].lower() in ["petty_cash", "petty cash"] and "expense" in a["account_type"].lower()), None)
+            account_id = petty_exp["account_id"] if petty_exp else next((a["account_id"] for a in accounts if "expense" in a["account_type"].lower()), "")
+
+        # 3. Map Paid Through Account (Bank/Cash)
+        paid_through_account_id = ""
+        petty_cash = next((a for a in accounts if a["account_name"].lower() in ["petty_cash", "petty cash"] and a["account_type"].lower() in ["cash", "bank"]), None)
+        if petty_cash:
+            paid_through_account_id = petty_cash["account_id"]
+        else:
+            cash = next((a for a in accounts if a["account_type"].lower() in ["cash", "bank", "equity"]), None)
+            paid_through_account_id = cash["account_id"] if cash else ""
+
+        if not account_id or not paid_through_account_id:
+             raise Exception("Failed to resolve mandatory Zoho accounts (Expense/PaidThrough)")
              
-        # Safely parse the amount — prefer functional_amount (entity base currency like BHD)
-        # over base_amount (target conversion currency like USD)
-        raw_amt = str(data.functional_amount or data.base_amount or data.amount or 0).replace(',', '')
-        amount = abs(float(raw_amt))  # abs() to prevent negative amounts (e.g. balance values)
+        # 4. Handle Multi-Currency
+        currency_id = ""
+        exchange_rate = 1.0
+        final_amount = 0.0
         
-        # Safely parse date to strict YYYY-MM-DD format as required by Zoho
-        zoho_date = ""
-        try:
-            if data.date:
-                parsed = dateutil.parser.parse(data.date)
-                zoho_date = parsed.strftime('%Y-%m-%d')
-        except:
-            pass
+        record_currency = (data.currency or base_currency_code).upper()
         
-        # Build a rich description for the Zoho expense
+        if record_currency != base_currency_code:
+            # Find currency_id in Zoho
+            z_curr = next((c for c in currencies if c["currency_code"] == record_currency), None)
+            if z_curr:
+                currency_id = z_curr["currency_id"]
+                exchange_rate = float(data.exchange_rate or 1.0)
+                final_amount = abs(float(str(data.amount or 0).replace(',', '')))
+            else:
+                # If currency not in Zoho, fallback to base currency conversion
+                final_amount = abs(float(str(data.functional_amount or data.base_amount or 0).replace(',', '')))
+        else:
+            final_amount = abs(float(str(data.functional_amount or data.base_amount or 0).replace(',', '')))
+
+        # 5. Build rich description
         desc_parts = []
-        if data.sub_type or data.category:
-            desc_parts.append(data.sub_type or data.category)
-        if data.description:
-            desc_parts.append(data.description)
-        if data.received_by:
-            desc_parts.append(f"Vendor: {data.received_by}")
-        if data.currency and data.amount:
-            desc_parts.append(f"Original: {data.currency} {data.amount}")
-        description = " | ".join(desc_parts) if desc_parts else "Expense from Portal"
+        if data.sub_type and data.category and data.sub_type != data.category:
+            desc_parts.append(f"{data.sub_type} ({data.category})")
+        else:
+            desc_parts.append(data.sub_type or data.category or "Expense")
+            
+        if data.description: desc_parts.append(data.description)
+        if data.received_by: desc_parts.append(f"Vendor: {data.received_by}")
+        if record_currency != base_currency_code:
+            desc_parts.append(f"Original: {record_currency} {data.amount}")
+        
+        description = " | ".join(desc_parts)
             
         payload = {
             "account_id": account_id,
             "paid_through_account_id": paid_through_account_id,
-            "amount": amount,
+            "amount": final_amount,
             "description": description,
             "reference_number": data.transaction_no or ""
         }
         
-        # Only add date if valid, else Zoho falls back to today
-        if zoho_date:
-            payload["date"] = zoho_date
+        if currency_id:
+            payload["currency_id"] = currency_id
+            payload["exchange_rate"] = exchange_rate
 
-        # 2. Create the actual Expense record
-        exp_url = f"https://www.{api_suffix}/books/v3/expenses"
-        
+        # Safely parse date
+        try:
+            if data.date:
+                parsed = dateutil.parser.parse(data.date)
+                payload["date"] = parsed.strftime('%Y-%m-%d')
+        except: pass
+
+        # 7. Create Expense
         async with httpx.AsyncClient() as client:
-            response = await client.post(exp_url, params=params, headers=headers, json=payload)
+            response = await client.post(f"{base_url}/expenses", params=params, headers=headers, json=payload)
             if response.status_code in [201, 200]:
-                res_data = response.json()
-                expense_id = res_data.get("expense", {}).get("expense_id")
-                print(f"Zoho Expense Created: {expense_id}")
-                return expense_id
+                return response.json().get("expense", {}).get("expense_id")
             else:
                 raise Exception(f"Zoho Expense Creation Failed: {response.status_code} - {response.text}")
 
